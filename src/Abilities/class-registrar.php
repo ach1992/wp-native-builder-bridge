@@ -1,0 +1,162 @@
+<?php
+/**
+ * Ability registration.
+ *
+ * @package WP_Native_Builder_Bridge
+ */
+
+namespace WP_Native_Builder_Bridge\Abilities;
+
+use WP_Native_Builder_Bridge\Support\Environment;
+use WP_Native_Builder_Bridge\Support\Permissions;
+use WP_Native_Builder_Bridge\Support\Settings;
+
+/**
+ * Registers bridge ability categories and foundation abilities.
+ */
+final class Registrar {
+	const CATEGORY = 'wp-native-builder';
+
+	/**
+	 * Runtime dependency inspector.
+	 *
+	 * @var Environment
+	 */
+	private $environment;
+
+	/**
+	 * Bridge settings service.
+	 *
+	 * @var Settings
+	 */
+	private $settings;
+
+	/**
+	 * Ability permission service.
+	 *
+	 * @var Permissions
+	 */
+	private $permissions;
+
+	/**
+	 * Creates the registrar.
+	 *
+	 * @param Environment $environment Runtime dependency inspector.
+	 * @param Settings    $settings    Bridge settings service.
+	 * @param Permissions $permissions Ability permission service.
+	 */
+	public function __construct( Environment $environment, Settings $settings, Permissions $permissions ) {
+		$this->environment = $environment;
+		$this->settings    = $settings;
+		$this->permissions = $permissions;
+	}
+
+	/**
+	 * Registers the bridge ability category.
+	 *
+	 * @return void
+	 */
+	public function register_category() {
+		if ( ! function_exists( 'wp_register_ability_category' ) ) {
+			return;
+		}
+
+		wp_register_ability_category(
+			self::CATEGORY,
+			array(
+				'label'       => __( 'WP Native Builder', 'wp-native-builder-bridge' ),
+				'description' => __( 'Typed WordPress site-building abilities exposed by WP Native Builder Bridge.', 'wp-native-builder-bridge' ),
+			)
+		);
+	}
+
+	/**
+	 * Registers foundation abilities.
+	 *
+	 * @return void
+	 */
+	public function register_abilities() {
+		if ( ! function_exists( 'wp_register_ability' ) ) {
+			return;
+		}
+
+		wp_register_ability(
+			'wp-native-builder/bridge-info',
+			array(
+				'label'               => __( 'Bridge Info', 'wp-native-builder-bridge' ),
+				'description'         => __( 'Returns the bridge dependency state and enabled access groups without exposing secrets.', 'wp-native-builder-bridge' ),
+				'category'            => self::CATEGORY,
+				'input_schema'        => array(
+					'type'                 => 'object',
+					'properties'           => array(),
+					'additionalProperties' => false,
+				),
+				'output_schema'       => array(
+					'type'       => 'object',
+					'properties' => array(
+						'plugin_version'    => array( 'type' => 'string' ),
+						'wordpress_version' => array( 'type' => 'string' ),
+						'abilities_api'     => array( 'type' => 'boolean' ),
+						'mcp_adapter'       => array(
+							'type'       => 'object',
+							'properties' => array(
+								'available' => array( 'type' => 'boolean' ),
+								'version'   => array( 'type' => 'string' ),
+							),
+							'required'   => array( 'available', 'version' ),
+						),
+						'access_groups'     => array(
+							'type'                 => 'object',
+							'additionalProperties' => array( 'type' => 'boolean' ),
+						),
+					),
+					'required'   => array( 'plugin_version', 'wordpress_version', 'abilities_api', 'mcp_adapter', 'access_groups' ),
+				),
+				'execute_callback'    => array( $this, 'bridge_info' ),
+				'permission_callback' => array( $this, 'can_read_bridge_info' ),
+				'meta'                => array(
+					'mcp'         => array(
+						'public' => true,
+						'type'   => 'tool',
+					),
+					'annotations' => array(
+						'readonly'    => true,
+						'destructive' => false,
+						'idempotent'  => true,
+					),
+				),
+			)
+		);
+	}
+
+	/**
+	 * Checks access to the bridge information ability.
+	 *
+	 * @return bool
+	 */
+	public function can_read_bridge_info() {
+		return $this->permissions->allowed( Settings::GROUP_SITE_READ, 'read' );
+	}
+
+	/**
+	 * Returns non-secret bridge dependency and access-group information.
+	 *
+	 * @return array<string,mixed> Bridge information.
+	 */
+	public function bridge_info() {
+		$environment = $this->environment->summary();
+		$groups      = array();
+
+		foreach ( $this->settings->all() as $key => $enabled ) {
+			$groups[ $key ] = (bool) $enabled;
+		}
+
+		return array(
+			'plugin_version'    => defined( 'WP_NATIVE_BUILDER_BRIDGE_VERSION' ) ? WP_NATIVE_BUILDER_BRIDGE_VERSION : '',
+			'wordpress_version' => $environment['wordpress_version'],
+			'abilities_api'     => (bool) $environment['abilities_api'],
+			'mcp_adapter'       => $environment['mcp_adapter'],
+			'access_groups'     => $groups,
+		);
+	}
+}
