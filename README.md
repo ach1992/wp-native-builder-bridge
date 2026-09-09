@@ -24,12 +24,12 @@ The project does not implement MCP from scratch and does not require WPVibe or a
 - media, taxonomies, and navigation;
 - Astra/Astra Pro integration where supported public interfaces exist;
 - Gravity Forms through its supported public API;
-- Code Snippets Pro where a stable supported integration API can be verified;
+- Code Snippets Pro where a stable supported integration API can be verified, including managed PHP/CSS/JavaScript/HTML snippet lifecycle where supported;
 - site configuration;
 - plugin/theme lifecycle operations;
 - users/roles and destructive operations when explicitly enabled.
 
-The bridge intentionally does **not** expose arbitrary PHP, SQL, shell/WP-CLI, unrestricted filesystem access, or credential retrieval.
+The bridge intentionally does **not** expose arbitrary PHP, SQL, shell/WP-CLI, unrestricted filesystem access, or credential retrieval. This does not prohibit managed PHP snippets: when the Code Snippets integration supports them, the bridge may create, update, activate, deactivate, and delete PHP snippets through the plugin's managed lifecycle instead of executing arbitrary PHP directly.
 
 ## Admin access model
 
