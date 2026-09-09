@@ -76,6 +76,20 @@ WordPress user capabilities and MCP transport authentication remain authoritativ
 
 This sequence is intentionally small. Implementation should add abstractions only when repeated code or a real interoperability requirement earns the complexity.
 
-## Current state
+## Development
 
-Project specification and implementation backlog are established. The plugin implementation has not started yet.
+Implementation and review state is tracked in the linked GitHub Issues and pull requests rather than duplicated in this README.
+
+The foundation has a dependency-free fast test runner:
+
+```bash
+php tests/run.php
+```
+
+A disposable WordPress 6.9+ environment with the official MCP Adapter can also run the integration smoke check through WP-CLI:
+
+```bash
+wp eval-file tests/integration/foundation-smoke.php --user=<administrator>
+```
+
+The production plugin does not require Node.js, Docker, Composer, or an external service at runtime.
