@@ -12,14 +12,18 @@ if ( ! defined( 'WP_UNINSTALL_PLUGIN' ) ) {
 /**
  * Deletes only the v0.1 options owned by this plugin.
  *
- * Persistent Workspace data is a post-v0.1 concern and must not be added to
- * this cleanup without its separate explicit uninstall-retention contract.
+ * Removing the OAuth installation identity invalidates every outstanding
+ * consent/code/access/refresh artifact without needing to enumerate transient
+ * rows. Persistent Workspace data is a post-v0.1 concern and must not be added
+ * to this cleanup without its separate explicit uninstall-retention contract.
  *
  * @return void
  */
 function wp_native_builder_bridge_uninstall_site_options() {
 	delete_option( 'wp_native_builder_bridge_settings' );
 	delete_option( 'wp_native_builder_bridge_recent_actions' );
+	delete_option( 'wp_native_builder_bridge_oauth_instance' );
+	delete_transient( 'wpnb_oauth_chatgpt_cimd_ok' );
 }
 
 if ( is_multisite() ) {
