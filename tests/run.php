@@ -237,6 +237,73 @@ wpnb_assert( isset( $GLOBALS['wpnb_test']['registered_abilities']['wp-native-bui
 wpnb_assert( isset( $GLOBALS['wpnb_test']['registered_abilities']['wp-native-builder/term-delete'] ), 'Gated taxonomy term deletion ability is registered.' );
 wpnb_assert( isset( $GLOBALS['wpnb_test']['registered_abilities']['wp-native-builder/navigation-read'] ), 'Theme-neutral navigation inspection ability is registered.' );
 wpnb_assert( isset( $GLOBALS['wpnb_test']['registered_abilities']['wp-native-builder/classic-navigation-mutate'] ), 'Classic navigation mutation ability is registered.' );
+wpnb_assert( isset( $GLOBALS['wpnb_test']['registered_abilities']['wp-native-builder/integration-status'] ), 'Optional integration status ability is registered without requiring providers.' );
+wpnb_assert( isset( $GLOBALS['wpnb_test']['registered_abilities']['wp-native-builder/site-settings-read'] ), 'Bounded site settings read ability is registered.' );
+wpnb_assert( isset( $GLOBALS['wpnb_test']['registered_abilities']['wp-native-builder/site-settings-update'] ), 'Bounded site settings update ability is registered.' );
+wpnb_assert( isset( $GLOBALS['wpnb_test']['registered_abilities']['wp-native-builder/extensions-read'] ), 'Extension inspection ability is registered.' );
+wpnb_assert( isset( $GLOBALS['wpnb_test']['registered_abilities']['wp-native-builder/extension-lifecycle'] ), 'Extension lifecycle ability is registered.' );
+wpnb_assert( isset( $GLOBALS['wpnb_test']['registered_abilities']['wp-native-builder/users-read'] ), 'User and role inspection ability is registered.' );
+wpnb_assert( isset( $GLOBALS['wpnb_test']['registered_abilities']['wp-native-builder/user-upsert'] ), 'Bounded user mutation ability is registered.' );
+wpnb_assert( isset( $GLOBALS['wpnb_test']['registered_abilities']['wp-native-builder/user-remove'] ), 'Explicit reassignment user removal ability is registered.' );
+wpnb_assert( ! isset( $GLOBALS['wpnb_test']['registered_abilities']['wp-native-builder/gravity-forms-read'] ), 'Gravity Forms fallback disappears when GFAPI is unavailable.' );
+wpnb_assert( ! isset( $GLOBALS['wpnb_test']['registered_abilities']['wp-native-builder/snippets-read'] ), 'Code Snippets fallback disappears when its supported API is unavailable.' );
+
+
+// Simulate the documented GFAPI surface only after the provider-absent assertions above.
+eval( 'class GFAPI {
+	public static $forms = array();
+	public static $next_id = 1;
+	public static function get_forms( $active = null, $trash = false, $sort_column = "id", $sort_dir = "ASC" ) {
+		$forms = array_values( self::$forms );
+		return array_values( array_filter( $forms, static function ( $form ) use ( $active, $trash ) {
+			if ( null !== $active && (bool) $form["is_active"] !== (bool) $active ) { return false; }
+			if ( null !== $trash && (bool) $form["is_trash"] !== (bool) $trash ) { return false; }
+			return true;
+		} ) );
+	}
+	public static function get_form( $id ) { return isset( self::$forms[ $id ] ) ? self::$forms[ $id ] : false; }
+	public static function form_id_exists( $id ) { return isset( self::$forms[ $id ] ); }
+	public static function add_form( $form ) { $id = self::$next_id++; $form["id"] = $id; $form["is_active"] = false; $form["is_trash"] = false; self::$forms[ $id ] = $form; return $id; }
+	public static function update_form( $form ) { if ( empty( $form["id"] ) || ! isset( self::$forms[ $form["id"] ] ) ) { return false; } $old = self::$forms[ $form["id"] ]; self::$forms[ $form["id"] ] = array_merge( $old, $form ); return true; }
+	public static function update_form_property( $id, $property, $value ) { if ( ! isset( self::$forms[ $id ] ) ) { return false; } self::$forms[ $id ][ $property ] = $value; return true; }
+	public static function delete_form( $id ) { if ( ! isset( self::$forms[ $id ] ) ) { return false; } unset( self::$forms[ $id ] ); return true; }
+}' );
+$GLOBALS['wpnb_test']['registered_abilities'] = array();
+$gf_registrar = new Registrar( $environment, $settings, $permissions );
+$gf_registrar->register_abilities();
+wpnb_assert( isset( $GLOBALS['wpnb_test']['registered_abilities']['wp-native-builder/gravity-forms-read'] ), 'Documented GFAPI surface registers the Bridge fallback when no native Gravity Forms Ability is observed.' );
+wpnb_assert( isset( $GLOBALS['wpnb_test']['registered_abilities']['wp-native-builder/gravity-form-upsert'] ), 'GFAPI fallback includes form creation/update.' );
+wpnb_assert( isset( $GLOBALS['wpnb_test']['registered_abilities']['wp-native-builder/gravity-form-status'] ), 'GFAPI fallback includes form activation state.' );
+wpnb_assert( isset( $GLOBALS['wpnb_test']['registered_abilities']['wp-native-builder/gravity-form-delete'] ), 'GFAPI fallback includes gated form deletion.' );
+$gf_upsert = $GLOBALS['wpnb_test']['registered_abilities']['wp-native-builder/gravity-form-upsert'];
+$gf_created = call_user_func( $gf_upsert['execute_callback'], array( 'action' => 'create', 'form' => array( 'title' => 'Provider contract fixture', 'description' => 'Fast GFAPI fallback coverage', 'fields' => array() ) ) );
+wpnb_assert( ! is_wp_error( $gf_created ) && 1 === $gf_created['form']['id'], 'GFAPI fallback creates and reads back a form without private storage access.' );
+$gf_status = $GLOBALS['wpnb_test']['registered_abilities']['wp-native-builder/gravity-form-status'];
+$gf_activated = call_user_func( $gf_status['execute_callback'], array( 'id' => 1, 'active' => true ) );
+wpnb_assert( ! is_wp_error( $gf_activated ) && true === $gf_activated['form']['active'], 'GFAPI fallback updates form activation state.' );
+$gf_delete = $GLOBALS['wpnb_test']['registered_abilities']['wp-native-builder/gravity-form-delete'];
+$gf_deleted = call_user_func( $gf_delete['execute_callback'], array( 'id' => 1 ) );
+wpnb_assert( ! is_wp_error( $gf_deleted ) && true === $gf_deleted['deleted'], 'GFAPI fallback deletes through GFAPI rather than provider storage internals.' );
+
+// A current public native Gravity Forms Ability must suppress the Bridge GFAPI duplicate.
+$GLOBALS['wpnb_test']['abilities']['gravityforms/forms-get'] = wpnb_test_ability( 'gravityforms/forms-get', array( 'id' => array( 'type' => 'integer' ) ), array( 'public' => true ), 'gravityforms' );
+$GLOBALS['wpnb_test']['registered_abilities'] = array();
+$gf_native_registrar = new Registrar( $environment, $settings, $permissions );
+$gf_native_registrar->register_abilities();
+wpnb_assert( ! isset( $GLOBALS['wpnb_test']['registered_abilities']['wp-native-builder/gravity-forms-read'] ), 'Observed public Gravity Forms native Ability suppresses the GFAPI fallback.' );
+$integration_status = call_user_func( $GLOBALS['wpnb_test']['registered_abilities']['wp-native-builder/integration-status']['execute_callback'] );
+wpnb_assert( 'ability' === $integration_status['gravity_forms']['mode'], 'Integration status prefers observed Gravity Forms native Abilities over GFAPI fallback.' );
+wpnb_assert( in_array( 'gravityforms/forms-get', $integration_status['gravity_forms']['ability_names'], true ), 'Integration status exposes the observed stable Gravity Forms Ability name.' );
+
+// A provider-native Ability hidden from MCP must still suppress the Bridge fallback and must not be reported as an active API fallback.
+$GLOBALS['wpnb_test']['abilities']['gravityforms/forms-get'] = wpnb_test_ability( 'gravityforms/forms-get', array( 'id' => array( 'type' => 'integer' ) ), array( 'public' => false ), 'gravityforms' );
+$GLOBALS['wpnb_test']['registered_abilities'] = array();
+$gf_hidden_registrar = new Registrar( $environment, $settings, $permissions );
+$gf_hidden_registrar->register_abilities();
+wpnb_assert( ! isset( $GLOBALS['wpnb_test']['registered_abilities']['wp-native-builder/gravity-forms-read'] ), 'MCP-hidden native Gravity Forms Ability still suppresses the GFAPI fallback.' );
+$hidden_status = call_user_func( $GLOBALS['wpnb_test']['registered_abilities']['wp-native-builder/integration-status']['execute_callback'] );
+wpnb_assert( 'unavailable' === $hidden_status['gravity_forms']['mode'], 'MCP-hidden Gravity Forms native surface is not misreported as an active Bridge API fallback.' );
+unset( $GLOBALS['wpnb_test']['abilities']['gravityforms/forms-get'] );
 wpnb_assert( true === $GLOBALS['wpnb_test']['registered_abilities']['wp-native-builder/classic-navigation-mutate']['meta']['annotations']['destructive'], 'Mixed classic-navigation mutation is conservatively marked destructive because remove_item is permanent.' );
 $site_ability = $GLOBALS['wpnb_test']['registered_abilities']['wp-native-builder/site-context'];
 wpnb_assert( true === call_user_func( $site_ability['permission_callback'] ), 'Site context honors Site Read plus WordPress read capability.' );

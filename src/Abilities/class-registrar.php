@@ -88,6 +88,19 @@ final class Registrar {
 	 */
 	private $navigation_abilities;
 
+	/** @var Integration_Abilities */
+	private $integration_abilities;
+	/** @var Site_Config_Abilities */
+	private $site_config_abilities;
+	/** @var Extension_Abilities */
+	private $extension_abilities;
+	/** @var User_Abilities */
+	private $user_abilities;
+	/** @var Gravity_Forms_Abilities */
+	private $gravity_forms_abilities;
+	/** @var Code_Snippets_Abilities */
+	private $code_snippets_abilities;
+
 	/**
 	 * Creates the registrar.
 	 *
@@ -107,6 +120,12 @@ final class Registrar {
 		$this->media_abilities      = new Media_Abilities( $this->permissions, $mutation_log );
 		$this->taxonomy_abilities   = new Taxonomy_Abilities( $this->permissions, $mutation_log );
 		$this->navigation_abilities = new Navigation_Abilities( $this->permissions, $mutation_log );
+		$this->integration_abilities = new Integration_Abilities( $this->resolver, $this->permissions );
+		$this->site_config_abilities = new Site_Config_Abilities( $this->permissions, $mutation_log );
+		$this->extension_abilities = new Extension_Abilities( $this->permissions, $mutation_log );
+		$this->user_abilities = new User_Abilities( $this->permissions, $mutation_log );
+		$this->gravity_forms_abilities = new Gravity_Forms_Abilities( $this->permissions, $mutation_log );
+		$this->code_snippets_abilities = new Code_Snippets_Abilities( $this->permissions, $mutation_log );
 	}
 
 	/**
@@ -192,6 +211,12 @@ final class Registrar {
 		$this->media_abilities->register();
 		$this->taxonomy_abilities->register();
 		$this->navigation_abilities->register();
+		$this->integration_abilities->register();
+		$this->site_config_abilities->register();
+		$this->extension_abilities->register();
+		$this->user_abilities->register();
+		$this->gravity_forms_abilities->register();
+		$this->code_snippets_abilities->register();
 	}
 
 	/**
