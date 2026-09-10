@@ -38,6 +38,11 @@ function wpnb_issue6_direct_tools_request( $method, $access_token, array $payloa
 $user_id = get_current_user_id();
 wpnb_issue6_direct_tools_assert( $user_id > 0, 'Run this smoke as an authenticated WordPress user.' );
 
+$bridge_ability = wp_get_ability( 'wp-native-builder/bridge-info' );
+wpnb_issue6_direct_tools_assert( $bridge_ability instanceof WP_Ability, 'bridge-info is missing from the live WordPress Ability registry before the direct MCP request.' );
+$bridge_meta = $bridge_ability->get_meta();
+wpnb_issue6_direct_tools_assert( true === ( $bridge_meta['mcp']['public'] ?? false ), 'bridge-info is registered but is not mcp.public before the direct MCP request.' );
+
 $store = new OAuth_Store();
 $oauth = new OAuth_Server( $store );
 $token = $store->issue(
@@ -109,7 +114,7 @@ $tools = wpnb_issue6_direct_tools_request(
 	$session_id
 );
 wpnb_issue6_direct_tools_assert( 200 === $tools->get_status(), 'Direct OAuth MCP tools/list failed.' );
-$tools_data  = wpnb_issue6_direct_tools_data( $tools );
+$tools_data = wpnb_issue6_direct_tools_data( $tools );
 $tool_names = array_column( $tools_data['result']['tools'] ?? array(), 'name' );
 sort( $tool_names );
 wpnb_issue6_direct_tools_assert(
@@ -138,7 +143,18 @@ $discover = wpnb_issue6_direct_tools_request(
 wpnb_issue6_direct_tools_assert( 200 === $discover->get_status(), 'Direct OAuth MCP ability discovery failed.' );
 $discover_data = wpnb_issue6_direct_tools_data( $discover );
 $discover_json = wp_json_encode( $discover_data );
-wpnb_issue6_direct_tools_assert( false !== strpos( $discover_json, 'wp-native-builder/bridge-info' ), 'Direct OAuth MCP discovery did not expose bridge-info.' );
+if ( false === strpos( $discover_json, 'wp-native-builder/bridge-info' ) ) {
+	$registry_names = array();
+	foreach ( wp_get_abilities() as $ability ) {
+		$registry_names[] = $ability->get_name();
+	}
+	sort( $registry_names );
+	throw new RuntimeException(
+		'Direct OAuth MCP discovery did not expose bridge-info. Registry=' .
+		implode( ',', $registry_names ) .
+		' Response=' . substr( $discover_json, 0, 3000 )
+	);
+}
 
 $execute = wpnb_issue6_direct_tools_request(
 	'POST',
