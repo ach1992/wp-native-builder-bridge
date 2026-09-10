@@ -27,7 +27,7 @@ function wp_native_builder_bridge_uninstall_site_options() {
 	delete_transient( 'wpnb_oauth_chatgpt_cimd_ok' );
 	delete_transient( 'wpnb_oauth_chatgpt_jwks' );
 	delete_transient( 'wpnb_oauth_chatgpt_jwks_refresh' );
-	wp_clear_scheduled_hook( 'wpnb_oauth_cleanup_client_assertion' );
+	wp_unschedule_hook( 'wpnb_oauth_cleanup_client_assertion' );
 
 	// Client-assertion replay claims contain only a hashed JWT ID and expiry,
 	// but uninstall should still remove every Bridge-owned claim immediately.

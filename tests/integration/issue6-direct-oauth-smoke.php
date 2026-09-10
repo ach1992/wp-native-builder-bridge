@@ -104,6 +104,7 @@ $fixture_client_metadata                  = array(
 	'token_endpoint_auth_method' => 'private_key_jwt',
 	'jwks_uri'                   => Client_Assertion_Validator::CHATGPT_JWKS_URI,
 );
+$GLOBALS['wpnb_issue6_jwks_fetches'] = 0;
 $wpnb_issue6_http_mock                    = static function ( $preempt, $args, $url ) use ( $fixture_jwks, $fixture_client_metadata ) {
 	if ( OAuth_Server::CHATGPT_CLIENT_ID === $url ) {
 		$body = $fixture_client_metadata;
