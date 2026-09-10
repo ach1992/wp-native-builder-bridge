@@ -21,6 +21,20 @@ function wpnb_issue6_direct_tools_data( $response ) {
 	return json_decode( wp_json_encode( $response->get_data() ), true );
 }
 
+function wpnb_issue6_direct_tools_structured_content( array $response_data ) {
+	if ( isset( $response_data['result']['structuredContent'] ) && is_array( $response_data['result']['structuredContent'] ) ) {
+		return $response_data['result']['structuredContent'];
+	}
+
+	$text = $response_data['result']['content'][0]['text'] ?? '';
+	if ( ! is_string( $text ) || '' === $text ) {
+		return array();
+	}
+
+	$decoded = json_decode( $text, true );
+	return is_array( $decoded ) ? $decoded : array();
+}
+
 function wpnb_issue6_direct_tools_request( $method, $access_token, array $payload = array(), $session_id = '' ) {
 	$request = new WP_REST_Request( $method, OAuth_Server::MCP_REQUEST_ROUTE );
 	$request->set_header( 'Authorization', 'Bearer ' . $access_token );
@@ -141,20 +155,13 @@ $discover = wpnb_issue6_direct_tools_request(
 	$session_id
 );
 wpnb_issue6_direct_tools_assert( 200 === $discover->get_status(), 'Direct OAuth MCP ability discovery failed.' );
-$discover_data = wpnb_issue6_direct_tools_data( $discover );
-$discover_json = wp_json_encode( $discover_data );
-if ( false === strpos( $discover_json, 'wp-native-builder/bridge-info' ) ) {
-	$registry_names = array();
-	foreach ( wp_get_abilities() as $ability ) {
-		$registry_names[] = $ability->get_name();
-	}
-	sort( $registry_names );
-	throw new RuntimeException(
-		'Direct OAuth MCP discovery did not expose bridge-info. Registry=' .
-		implode( ',', $registry_names ) .
-		' Response=' . substr( $discover_json, 0, 3000 )
-	);
-}
+$discover_data       = wpnb_issue6_direct_tools_data( $discover );
+$discover_structured = wpnb_issue6_direct_tools_structured_content( $discover_data );
+$ability_names       = array_column( $discover_structured['abilities'] ?? array(), 'name' );
+wpnb_issue6_direct_tools_assert(
+	in_array( 'wp-native-builder/bridge-info', $ability_names, true ),
+	'Direct OAuth MCP discovery did not expose bridge-info from the live mcp.public registry.'
+);
 
 $execute = wpnb_issue6_direct_tools_request(
 	'POST',
@@ -174,8 +181,9 @@ $execute = wpnb_issue6_direct_tools_request(
 	$session_id
 );
 wpnb_issue6_direct_tools_assert( 200 === $execute->get_status(), 'Direct OAuth MCP bridge-info execution failed.' );
-$execute_data = wpnb_issue6_direct_tools_data( $execute );
-wpnb_issue6_direct_tools_assert( true === ( $execute_data['result']['structuredContent']['success'] ?? false ), 'Direct OAuth MCP bridge-info execution did not succeed.' );
+$execute_data       = wpnb_issue6_direct_tools_data( $execute );
+$execute_structured = wpnb_issue6_direct_tools_structured_content( $execute_data );
+wpnb_issue6_direct_tools_assert( true === ( $execute_structured['success'] ?? false ), 'Direct OAuth MCP bridge-info execution did not succeed.' );
 
 $delete = wpnb_issue6_direct_tools_request( 'DELETE', $token, array(), $session_id );
 wpnb_issue6_direct_tools_assert( in_array( $delete->get_status(), array( 200, 204 ), true ), 'Direct OAuth MCP session termination failed.' );
