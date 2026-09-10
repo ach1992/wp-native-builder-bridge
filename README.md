@@ -70,11 +70,12 @@ See [`docs/PROJECT-WORKSPACE-ARCHITECTURE.md`](./docs/PROJECT-WORKSPACE-ARCHITEC
 
 | Source | Purpose |
 |---|---|
-| [`MASTER-SPEC.md`](./MASTER-SPEC.md) | Canonical architecture, ability surface, permissions, reuse policy, constraints, and completion criteria |
+| [`MASTER-SPEC.md`](./MASTER-SPEC.md) | Canonical project-level architecture, ability surface, permissions, reuse policy, constraints, and completion criteria |
+| [`docs/CORE-ABILITY-SAFETY-BOUNDARIES.md`](./docs/CORE-ABILITY-SAFETY-BOUNDARIES.md) | Canonical detailed v0.1 safety boundary for generic content/CPT eligibility, stale-write identity, destructive status/navigation rules, and verified Ability reuse |
 | [`docs/PROJECT-WORKSPACE-ARCHITECTURE.md`](./docs/PROJECT-WORKSPACE-ARCHITECTURE.md) | Accepted post-v0.1 Workspace storage, isolation, versioning, admin UX, and lifecycle architecture |
 | [Issue #1](https://github.com/ach1992/wp-native-builder-bridge/issues/1) | v0.1 program/outcome |
 | [Issue #2](https://github.com/ach1992/wp-native-builder-bridge/issues/2) | Plugin/MCP foundation and access controls |
-| [Issue #3](https://github.com/ach1992/wp-native-builder-bridge/issues/3) | Core WordPress/Gutenberg/media/navigation abilities |
+| [Issue #3](https://github.com/ach1992/wp-native-builder-bridge/issues/3) | Core WordPress/Gutenberg/media/navigation abilities and live implementation acceptance |
 | [Issue #4](https://github.com/ach1992/wp-native-builder-bridge/issues/4) | Astra/Gravity Forms/Code Snippets/advanced admin abilities |
 | [Issue #5](https://github.com/ach1992/wp-native-builder-bridge/issues/5) | Ability hardening, tests, and CI |
 | [Issue #6](https://github.com/ach1992/wp-native-builder-bridge/issues/6) | Real ChatGPT MCP interoperability, docs, and v0.1 release |
