@@ -12,31 +12,25 @@ use WP_Native_Builder_Bridge\Support\Permissions;
 use WP_Native_Builder_Bridge\Support\Settings;
 
 /**
- * Registers bridge ability categories and foundation abilities.
+ * Registers bridge ability categories and providers.
  */
 final class Registrar {
 	const CATEGORY = 'wp-native-builder';
 
-	/**
-	 * Runtime dependency inspector.
-	 *
-	 * @var Environment
-	 */
+	/** @var Environment */
 	private $environment;
 
-	/**
-	 * Bridge settings service.
-	 *
-	 * @var Settings
-	 */
+	/** @var Settings */
 	private $settings;
 
-	/**
-	 * Ability permission service.
-	 *
-	 * @var Permissions
-	 */
+	/** @var Permissions */
 	private $permissions;
+
+	/** @var Ability_Resolver */
+	private $resolver;
+
+	/** @var Site_Abilities */
+	private $site_abilities;
 
 	/**
 	 * Creates the registrar.
@@ -46,9 +40,11 @@ final class Registrar {
 	 * @param Permissions $permissions Ability permission service.
 	 */
 	public function __construct( Environment $environment, Settings $settings, Permissions $permissions ) {
-		$this->environment = $environment;
-		$this->settings    = $settings;
-		$this->permissions = $permissions;
+		$this->environment    = $environment;
+		$this->settings       = $settings;
+		$this->permissions    = $permissions;
+		$this->resolver       = new Ability_Resolver();
+		$this->site_abilities = new Site_Abilities( $this->resolver, $this->permissions );
 	}
 
 	/**
@@ -71,7 +67,7 @@ final class Registrar {
 	}
 
 	/**
-	 * Registers foundation abilities.
+	 * Registers bridge abilities.
 	 *
 	 * @return void
 	 */
@@ -127,6 +123,8 @@ final class Registrar {
 				),
 			)
 		);
+
+		$this->site_abilities->register();
 	}
 
 	/**
