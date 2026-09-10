@@ -80,6 +80,7 @@ See [`docs/PROJECT-WORKSPACE-ARCHITECTURE.md`](./docs/PROJECT-WORKSPACE-ARCHITEC
 |---|---|
 | [`MASTER-SPEC.md`](./MASTER-SPEC.md) | Canonical project-level architecture, ability surface, permissions, reuse policy, constraints, and completion criteria |
 | [`docs/CORE-ABILITY-SAFETY-BOUNDARIES.md`](./docs/CORE-ABILITY-SAFETY-BOUNDARIES.md) | Canonical detailed v0.1 safety boundary for generic content/CPT eligibility, stale-write identity, destructive status/navigation rules, and verified Ability reuse |
+| [`docs/OPTIONAL-INTEGRATIONS-AND-ADMIN.md`](./docs/OPTIONAL-INTEGRATIONS-AND-ADMIN.md) | v0.1 provider reuse/fallback rules and bounded site settings, extensions, snippets, forms, users, and destructive administration |
 | [`docs/PROJECT-WORKSPACE-ARCHITECTURE.md`](./docs/PROJECT-WORKSPACE-ARCHITECTURE.md) | Accepted post-v0.1 Workspace storage, isolation, versioning, admin UX, and lifecycle architecture |
 | [Issue #1](https://github.com/ach1992/wp-native-builder-bridge/issues/1) | v0.1 program/outcome |
 | [Issue #2](https://github.com/ach1992/wp-native-builder-bridge/issues/2) | Plugin/MCP foundation and access controls |
@@ -115,10 +116,16 @@ The foundation has a dependency-free fast test runner:
 php tests/run.php
 ```
 
-A disposable WordPress 6.9+ environment with the official MCP Adapter can also run the integration smoke check through WP-CLI:
+Disposable WordPress environments with the official MCP Adapter can run the integration checks through WP-CLI:
 
 ```bash
 wp eval-file tests/integration/foundation-smoke.php --user=<administrator>
+wp eval-file tests/integration/issue3-content-block-smoke.php --user=<administrator>
+wp eval-file tests/integration/issue3-safety-regressions.php --user=<administrator>
+wp eval-file tests/integration/issue3-provider-smoke.php --user=<administrator>
+wp eval-file tests/integration/issue4-core-admin-smoke.php --user=<administrator>
 ```
+
+Optional provider fixtures have focused checks in `tests/integration/issue4-code-snippets-smoke.php` and `tests/integration/issue4-astra-reuse-smoke.php`. They are designed for disposable environments and skip cleanly when the relevant provider is unavailable. Astra's native Ability test assumes Astra is active and its own Abilities toggle is enabled; the Bridge never enables that setting itself.
 
 The production plugin does not require Node.js, Docker, Composer, or an external service at runtime.

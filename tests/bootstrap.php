@@ -53,6 +53,24 @@ function wpnb_test_reset_state() {
 }
 
 /**
+ * Minimal WordPress error object for dependency-free provider tests.
+ */
+class WP_Error {
+	private $code;
+	private $message;
+
+	public function __construct( $code = '', $message = '' ) {
+		$this->code    = (string) $code;
+		$this->message = (string) $message;
+	}
+
+	public function get_error_code() { return $this->code; }
+	public function get_error_message() { return $this->message; }
+	public function has_errors() { return '' !== $this->code; }
+}
+function is_wp_error( $thing ) { return $thing instanceof WP_Error; }
+
+/**
  * Minimal Ability object for dependency-free tests.
  */
 final class WP_Native_Builder_Test_Ability {

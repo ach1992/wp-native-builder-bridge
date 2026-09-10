@@ -105,7 +105,7 @@ final class Plugin {
 		add_action( 'admin_menu', array( $this->settings_page, 'register_menu' ) );
 		add_action( 'admin_notices', array( $this, 'render_dependency_notices' ) );
 		add_action( 'wp_abilities_api_categories_init', array( $this->registrar, 'register_category' ) );
-		add_action( 'wp_abilities_api_init', array( $this->registrar, 'register_abilities' ) );
+		add_action( 'wp_abilities_api_init', array( $this->registrar, 'register_abilities' ), 100 );
 	}
 
 	/**
