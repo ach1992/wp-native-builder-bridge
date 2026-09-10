@@ -14,10 +14,18 @@ use WP_Native_Builder_Bridge\Support\Settings;
  * Registers the Bridge-owned site context supplement.
  */
 final class Site_Abilities {
-	/** @var Ability_Resolver */
+	/**
+	 * Existing Ability resolver.
+	 *
+	 * @var Ability_Resolver
+	 */
 	private $resolver;
 
-	/** @var Permissions */
+	/**
+	 * Bridge permission service.
+	 *
+	 * @var Permissions
+	 */
 	private $permissions;
 
 	/**
@@ -93,7 +101,11 @@ final class Site_Abilities {
 		);
 	}
 
-	/** @return array<string,mixed> */
+	/**
+	 * Returns site configuration relevant to site building.
+	 *
+	 * @return array<string,mixed> Site summary.
+	 */
 	private function site_summary() {
 		$timezone = function_exists( 'wp_timezone_string' ) ? wp_timezone_string() : (string) get_option( 'timezone_string', '' );
 
@@ -108,7 +120,11 @@ final class Site_Abilities {
 		);
 	}
 
-	/** @return array<string,mixed> */
+	/**
+	 * Returns bounded current-user capability information.
+	 *
+	 * @return array<string,mixed> Current-user summary.
+	 */
 	private function current_user_summary() {
 		$capabilities = array(
 			'read',
@@ -126,7 +142,7 @@ final class Site_Abilities {
 			'edit_users',
 			'delete_users',
 		);
-		$effective = array();
+		$effective    = array();
 
 		foreach ( $capabilities as $capability ) {
 			$effective[ $capability ] = current_user_can( $capability );
@@ -138,7 +154,11 @@ final class Site_Abilities {
 		);
 	}
 
-	/** @return array<string,mixed> */
+	/**
+	 * Returns active theme information.
+	 *
+	 * @return array<string,mixed> Theme summary.
+	 */
 	private function theme_summary() {
 		if ( ! function_exists( 'wp_get_theme' ) ) {
 			return array(
@@ -161,7 +181,11 @@ final class Site_Abilities {
 		);
 	}
 
-	/** @return array<int,array<string,mixed>> */
+	/**
+	 * Returns installed plugin summaries without secrets.
+	 *
+	 * @return array<int,array<string,mixed>> Plugin summaries.
+	 */
 	private function plugin_summaries() {
 		$active  = get_option( 'active_plugins', array() );
 		$active  = is_array( $active ) ? array_values( $active ) : array();
@@ -189,7 +213,11 @@ final class Site_Abilities {
 		return $results;
 	}
 
-	/** @return array<int,array<string,mixed>> */
+	/**
+	 * Returns editable post-type discovery information.
+	 *
+	 * @return array<int,array<string,mixed>> Post-type summaries.
+	 */
 	private function post_type_summaries() {
 		if ( ! function_exists( 'get_post_types' ) ) {
 			return array();
@@ -217,7 +245,11 @@ final class Site_Abilities {
 		return $results;
 	}
 
-	/** @return array<int,array<string,mixed>> */
+	/**
+	 * Returns editable taxonomy discovery information.
+	 *
+	 * @return array<int,array<string,mixed>> Taxonomy summaries.
+	 */
 	private function taxonomy_summaries() {
 		if ( ! function_exists( 'get_taxonomies' ) ) {
 			return array();
@@ -244,9 +276,13 @@ final class Site_Abilities {
 		return $results;
 	}
 
-	/** @return array<string,string> */
+	/**
+	 * Returns known compatible upstream Ability reuse candidates.
+	 *
+	 * @return array<string,string> Logical operation to Ability-name map.
+	 */
 	private function reuse_map() {
-		$map = array(
+		$map    = array(
 			'site_info'        => array( array( 'core/get-site-info' ), array() ),
 			'user_info'        => array( array( 'core/get-user-info' ), array() ),
 			'environment_info' => array( array( 'core/get-environment-info' ), array() ),
@@ -262,7 +298,11 @@ final class Site_Abilities {
 		return $result;
 	}
 
-	/** @return array<string,mixed> */
+	/**
+	 * Returns the site-context output schema.
+	 *
+	 * @return array<string,mixed> JSON schema.
+	 */
 	private function output_schema() {
 		$closed_object = static function ( array $properties, array $required ) {
 			return array(
@@ -273,19 +313,22 @@ final class Site_Abilities {
 			);
 		};
 
-		$site = $closed_object(
+		$site          = $closed_object(
 			array(
 				'locale'              => array( 'type' => 'string' ),
 				'timezone'            => array( 'type' => 'string' ),
 				'permalink_structure' => array( 'type' => 'string' ),
-				'show_on_front'       => array( 'type' => 'string', 'enum' => array( 'posts', 'page' ) ),
+				'show_on_front'       => array(
+					'type' => 'string',
+					'enum' => array( 'posts', 'page' ),
+				),
 				'page_on_front'       => array( 'type' => 'integer' ),
 				'page_for_posts'      => array( 'type' => 'integer' ),
 				'is_rtl'              => array( 'type' => 'boolean' ),
 			),
 			array( 'locale', 'timezone', 'permalink_structure', 'show_on_front', 'page_on_front', 'page_for_posts', 'is_rtl' )
 		);
-		$current_user = $closed_object(
+		$current_user  = $closed_object(
 			array(
 				'id'           => array( 'type' => 'integer' ),
 				'capabilities' => array(
@@ -295,7 +338,7 @@ final class Site_Abilities {
 			),
 			array( 'id', 'capabilities' )
 		);
-		$theme = $closed_object(
+		$theme         = $closed_object(
 			array(
 				'name'           => array( 'type' => 'string' ),
 				'version'        => array( 'type' => 'string' ),
@@ -305,7 +348,7 @@ final class Site_Abilities {
 			),
 			array( 'name', 'version', 'stylesheet', 'template', 'is_block_theme' )
 		);
-		$plugin = $closed_object(
+		$plugin        = $closed_object(
 			array(
 				'file'    => array( 'type' => 'string' ),
 				'name'    => array( 'type' => 'string' ),
@@ -314,7 +357,7 @@ final class Site_Abilities {
 			),
 			array( 'file', 'name', 'version', 'active' )
 		);
-		$post_type = $closed_object(
+		$post_type     = $closed_object(
 			array(
 				'name'               => array( 'type' => 'string' ),
 				'label'              => array( 'type' => 'string' ),
@@ -326,18 +369,21 @@ final class Site_Abilities {
 			),
 			array( 'name', 'label', 'hierarchical', 'show_in_rest', 'rest_base', 'supports_editor', 'supports_thumbnail' )
 		);
-		$taxonomy = $closed_object(
+		$taxonomy      = $closed_object(
 			array(
 				'name'         => array( 'type' => 'string' ),
 				'label'        => array( 'type' => 'string' ),
 				'hierarchical' => array( 'type' => 'boolean' ),
 				'show_in_rest' => array( 'type' => 'boolean' ),
 				'rest_base'    => array( 'type' => 'string' ),
-				'object_types' => array( 'type' => 'array', 'items' => array( 'type' => 'string' ) ),
+				'object_types' => array(
+					'type'  => 'array',
+					'items' => array( 'type' => 'string' ),
+				),
 			),
 			array( 'name', 'label', 'hierarchical', 'show_in_rest', 'rest_base', 'object_types' )
 		);
-		$reuse = $closed_object(
+		$reuse         = $closed_object(
 			array(
 				'site_info'        => array( 'type' => 'string' ),
 				'user_info'        => array( 'type' => 'string' ),
@@ -361,11 +407,23 @@ final class Site_Abilities {
 				'site'               => $site,
 				'current_user'       => $current_user,
 				'theme'              => $theme,
-				'plugins'            => array( 'type' => 'array', 'items' => $plugin ),
-				'post_types'         => array( 'type' => 'array', 'items' => $post_type ),
-				'taxonomies'         => array( 'type' => 'array', 'items' => $taxonomy ),
+				'plugins'            => array(
+					'type'  => 'array',
+					'items' => $plugin,
+				),
+				'post_types'         => array(
+					'type'  => 'array',
+					'items' => $post_type,
+				),
+				'taxonomies'         => array(
+					'type'  => 'array',
+					'items' => $taxonomy,
+				),
 				'reuse'              => $reuse,
-				'external_abilities' => array( 'type' => 'array', 'items' => $external_item ),
+				'external_abilities' => array(
+					'type'  => 'array',
+					'items' => $external_item,
+				),
 			),
 			array( 'site', 'current_user', 'theme', 'plugins', 'post_types', 'taxonomies', 'reuse', 'external_abilities' )
 		);

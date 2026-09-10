@@ -8,6 +8,7 @@
 namespace WP_Native_Builder_Bridge\Abilities;
 
 use WP_Native_Builder_Bridge\Support\Environment;
+use WP_Native_Builder_Bridge\Support\Mutation_Log;
 use WP_Native_Builder_Bridge\Support\Permissions;
 use WP_Native_Builder_Bridge\Support\Settings;
 
@@ -17,20 +18,54 @@ use WP_Native_Builder_Bridge\Support\Settings;
 final class Registrar {
 	const CATEGORY = 'wp-native-builder';
 
-	/** @var Environment */
+	/**
+	 * Runtime dependency inspector.
+	 *
+	 * @var Environment
+	 */
 	private $environment;
 
-	/** @var Settings */
+	/**
+	 * Bridge settings service.
+	 *
+	 * @var Settings
+	 */
 	private $settings;
 
-	/** @var Permissions */
+	/**
+	 * Bridge permission service.
+	 *
+	 * @var Permissions
+	 */
 	private $permissions;
 
-	/** @var Ability_Resolver */
+	/**
+	 * Existing Ability resolver.
+	 *
+	 * @var Ability_Resolver
+	 */
 	private $resolver;
 
-	/** @var Site_Abilities */
+	/**
+	 * Site inspection provider.
+	 *
+	 * @var Site_Abilities
+	 */
 	private $site_abilities;
+
+	/**
+	 * Generic content provider.
+	 *
+	 * @var Content_Abilities
+	 */
+	private $content_abilities;
+
+	/**
+	 * Gutenberg block provider.
+	 *
+	 * @var Block_Abilities
+	 */
+	private $block_abilities;
 
 	/**
 	 * Creates the registrar.
@@ -40,11 +75,14 @@ final class Registrar {
 	 * @param Permissions $permissions Ability permission service.
 	 */
 	public function __construct( Environment $environment, Settings $settings, Permissions $permissions ) {
-		$this->environment    = $environment;
-		$this->settings       = $settings;
-		$this->permissions    = $permissions;
-		$this->resolver       = new Ability_Resolver();
-		$this->site_abilities = new Site_Abilities( $this->resolver, $this->permissions );
+		$this->environment       = $environment;
+		$this->settings          = $settings;
+		$this->permissions       = $permissions;
+		$this->resolver          = new Ability_Resolver();
+		$mutation_log            = new Mutation_Log();
+		$this->site_abilities    = new Site_Abilities( $this->resolver, $this->permissions );
+		$this->content_abilities = new Content_Abilities( $this->resolver, $this->permissions, $mutation_log );
+		$this->block_abilities   = new Block_Abilities( $this->permissions, $mutation_log );
 	}
 
 	/**
@@ -125,6 +163,8 @@ final class Registrar {
 		);
 
 		$this->site_abilities->register();
+		$this->content_abilities->register();
+		$this->block_abilities->register();
 	}
 
 	/**

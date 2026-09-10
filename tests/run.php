@@ -207,6 +207,10 @@ $GLOBALS['wpnb_test']['abilities'] = array(
 $permissions = new Permissions( $settings );
 $registrar   = new Registrar( $environment, $settings, $permissions );
 $registrar->register_abilities();
+wpnb_assert( ! isset( $GLOBALS['wpnb_test']['registered_abilities']['wp-native-builder/content-read'] ), 'Compatible upstream content-read Ability suppresses the duplicate Bridge read fallback.' );
+wpnb_assert( isset( $GLOBALS['wpnb_test']['registered_abilities']['wp-native-builder/content-upsert'] ), 'Bridge content mutation fallback remains available for uncovered operations.' );
+wpnb_assert( isset( $GLOBALS['wpnb_test']['registered_abilities']['wp-native-builder/blocks-read'] ), 'Generic Gutenberg block inspection ability is registered.' );
+wpnb_assert( isset( $GLOBALS['wpnb_test']['registered_abilities']['wp-native-builder/blocks-mutate'] ), 'Generic Gutenberg block mutation ability is registered.' );
 $site_ability = $GLOBALS['wpnb_test']['registered_abilities']['wp-native-builder/site-context'];
 wpnb_assert( true === call_user_func( $site_ability['permission_callback'] ), 'Site context honors Site Read plus WordPress read capability.' );
 $site_context = call_user_func( $site_ability['execute_callback'] );
@@ -232,6 +236,10 @@ wpnb_assert( in_array( 'acme/site-builder-info', $site_catalog_names, true ), 'S
 unset( $GLOBALS['wpnb_test']['abilities']['core/read-content'] );
 $site_context_without_read = call_user_func( $site_ability['execute_callback'] );
 wpnb_assert( '' === $site_context_without_read['reuse']['content_read'], 'Missing optional external content Ability cleanly falls back to no reuse candidate.' );
+$GLOBALS['wpnb_test']['registered_abilities'] = array();
+$registrar_without_read = new Registrar( $environment, $settings, $permissions );
+$registrar_without_read->register_abilities();
+wpnb_assert( isset( $GLOBALS['wpnb_test']['registered_abilities']['wp-native-builder/content-read'] ), 'Bridge content-read fallback registers when the compatible upstream Ability is absent.' );
 
 $GLOBALS['wpnb_test']['options'][ Settings::OPTION_NAME ][ Settings::GROUP_SITE_READ ] = 0;
 wpnb_assert( false === call_user_func( $site_ability['permission_callback'] ), 'Disabled Site Read group denies site-context.' );
