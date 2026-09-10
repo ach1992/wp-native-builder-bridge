@@ -58,17 +58,27 @@ WordPress user capabilities and MCP transport authentication remain authoritativ
 
 A future compatible transport may replace MCP Adapter if evidence shows that is a better supported path, but the normal architecture should use one transport rather than stacking overlapping MCP server plugins.
 
+## Post-v0.1 Persistent Workspace
+
+The accepted follow-on architecture adds a small WordPress-hosted Persistent Workspace so fresh companion-Skill chats can resume durable site-project context without receiving old chat history. This capability is **not implemented in v0.1 and does not block the v0.1 release path**.
+
+Workspace uses private WordPress-native storage, dedicated typed abilities, explicit isolation from generic content/Gutenberg operations, and optimistic concurrency that does not depend on WordPress revision rows surviving. WordPress revisions may remain optional history; any required history that must survive ordinary revision pruning is owned by bounded Bridge-managed Workspace version/snapshot storage instead.
+
+See [`docs/PROJECT-WORKSPACE-ARCHITECTURE.md`](./docs/PROJECT-WORKSPACE-ARCHITECTURE.md) and Issue #8 for the accepted Bridge-side contract and future implementation work.
+
 ## Project map
 
 | Source | Purpose |
 |---|---|
 | [`MASTER-SPEC.md`](./MASTER-SPEC.md) | Canonical architecture, ability surface, permissions, reuse policy, constraints, and completion criteria |
+| [`docs/PROJECT-WORKSPACE-ARCHITECTURE.md`](./docs/PROJECT-WORKSPACE-ARCHITECTURE.md) | Accepted post-v0.1 Workspace storage, isolation, versioning, admin UX, and lifecycle architecture |
 | [Issue #1](https://github.com/ach1992/wp-native-builder-bridge/issues/1) | v0.1 program/outcome |
 | [Issue #2](https://github.com/ach1992/wp-native-builder-bridge/issues/2) | Plugin/MCP foundation and access controls |
 | [Issue #3](https://github.com/ach1992/wp-native-builder-bridge/issues/3) | Core WordPress/Gutenberg/media/navigation abilities |
 | [Issue #4](https://github.com/ach1992/wp-native-builder-bridge/issues/4) | Astra/Gravity Forms/Code Snippets/advanced admin abilities |
 | [Issue #5](https://github.com/ach1992/wp-native-builder-bridge/issues/5) | Ability hardening, tests, and CI |
 | [Issue #6](https://github.com/ach1992/wp-native-builder-bridge/issues/6) | Real ChatGPT MCP interoperability, docs, and v0.1 release |
+| [Issue #8](https://github.com/ach1992/wp-native-builder-bridge/issues/8) | Post-v0.1 Persistent Workspace implementation and Bridge-local validation |
 | [`wp-native-builder`](https://github.com/ach1992/wp-native-builder) | Companion ChatGPT Skill |
 
 ## Development path
@@ -78,7 +88,10 @@ A future compatible transport may replace MCP Adapter if evidence shows that is 
   -> #3 ability reuse + core site-building abilities
   -> #4 optional integrations + advanced admin
   -> #5 contract/permission hardening + CI
-  -> #6 real ChatGPT MCP test + release
+  -> #6 real ChatGPT MCP test + v0.1 release
+
+post-v0.1:
+  -> #8 persistent Workspace storage + abilities + admin UX
 ```
 
 This sequence is intentionally small. Implementation should add abstractions only when repeated code or a real interoperability requirement earns the complexity.
