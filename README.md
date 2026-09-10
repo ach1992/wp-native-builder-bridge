@@ -4,6 +4,14 @@ A free, self-hosted WordPress plugin that exposes typed, permission-checked Word
 
 The bridge is the companion runtime for [`wp-native-builder`](https://github.com/ach1992/wp-native-builder). It exists to reduce manual WordPress admin work while keeping the site owner in control of which access groups are available.
 
+## Repository ownership
+
+This repository owns only the **WP Native Builder Bridge plugin/runtime**. A Master assigned to `ach1992/wp-native-builder-bridge` must not modify or administer the companion `ach1992/wp-native-builder` Skill repository unless the owner explicitly changes that assignment.
+
+Cross-repository coordination is contract-based: when a Bridge decision changes what the Skill needs to know, persist the Bridge-side decision here and provide a concise handoff to the Skill Master. The Skill Master owns any Skill-side documentation, Issues, code, packaging, or release changes. Likewise, requirements arriving from the Skill are inputs to reconcile against this repository's current authoritative specification/issues; they do not authorize the Bridge Master to mutate the Skill repository or silently override Bridge-local contracts.
+
+This ownership boundary applies to source files, documentation, Issues, branches, pull requests, releases, and project administration. It does not prevent read-only inspection of the companion project when a current interface/dependency must be verified.
+
 ## Architecture
 
 ```text
