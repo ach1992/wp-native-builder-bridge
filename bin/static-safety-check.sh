@@ -29,4 +29,18 @@ if grep -R -nE "['\"](server_path|file_path|package_url|shell_command|sql_query|
     exit 1
 fi
 
+# The consent form posts to the same WordPress origin, then redirects to ChatGPT's
+# fixed OAuth callback. Chromium applies form-action across that redirect chain,
+# so the callback origin must remain explicitly allowed without broadening the CSP.
+oauth_consent_csp_count="$(grep -cF "form-action 'self' https://chatgpt.com" src/Auth/class-oauth-server.php || true)"
+if [[ "$oauth_consent_csp_count" != "1" ]]; then
+    echo "ERROR: OAuth consent CSP must explicitly allow the fixed ChatGPT callback origin exactly once." >&2
+    exit 1
+fi
+
+if grep -Fq "form-action 'self';" src/Auth/class-oauth-server.php; then
+    echo "ERROR: OAuth consent CSP regressed to same-origin-only form navigation and can block the ChatGPT callback redirect." >&2
+    exit 1
+fi
+
 echo "PASS: static safety surface audit."

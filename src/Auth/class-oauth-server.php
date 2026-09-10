@@ -979,7 +979,7 @@ final class OAuth_Server {
 		$user = wp_get_current_user();
 		nocache_headers();
 		send_frame_options_header();
-		header( "Content-Security-Policy: default-src 'none'; style-src 'unsafe-inline'; form-action 'self'; base-uri 'none'; frame-ancestors 'none'" );
+		header( "Content-Security-Policy: default-src 'none'; style-src 'unsafe-inline'; form-action 'self' https://chatgpt.com; base-uri 'none'; frame-ancestors 'none'" );
 		status_header( 200 );
 		?>
 <!doctype html>
