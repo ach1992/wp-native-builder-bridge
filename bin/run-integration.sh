@@ -42,6 +42,7 @@ wp=("${compose[@]}" run --rm cli)
 mcp_adapter_url="${MCP_ADAPTER_URL:-https://github.com/WordPress/mcp-adapter/releases/download/v0.6.1/mcp-adapter.zip}"
 "${wp[@]}" plugin install "$mcp_adapter_url" --activate --allow-root
 "${wp[@]}" plugin install /var/www/html/wp-native-builder-bridge.zip --activate --allow-root
+"${wp[@]}" rewrite structure '/%postname%/' --hard --allow-root >/dev/null
 "${compose[@]}" exec -T wordpress rm -f /var/www/html/wp-native-builder-bridge.zip
 
 # Integration-only tests/fixtures are copied beside the installed release package after activation.
@@ -66,6 +67,8 @@ do
     echo "== ${test} =="
     "${wp[@]}" eval-file "wp-content/plugins/wp-native-builder-bridge/tests/integration/${test}" --user=1 --allow-root
 done
+
+bash "$root/bin/run-direct-http-smoke.sh"
 
 "${wp[@]}" eval-file wp-content/plugins/wp-native-builder-bridge/tests/integration/issue4-code-snippets-smoke.php --user=1 --allow-root
 "${wp[@]}" eval-file wp-content/plugins/wp-native-builder-bridge/tests/integration/issue4-astra-reuse-smoke.php --user=1 --allow-root
