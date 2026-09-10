@@ -41,14 +41,14 @@ final class Settings_Page {
 	/**
 	 * Creates the settings page.
 	 *
-	 * @param Environment  $environment  Runtime dependency inspector.
-	 * @param Settings     $settings     Bridge settings service.
-	 * @param OAuth_Server $oauth_server Direct ChatGPT OAuth/MCP service.
+	 * @param Environment       $environment  Runtime dependency inspector.
+	 * @param Settings          $settings     Bridge settings service.
+	 * @param OAuth_Server|null $oauth_server Optional direct ChatGPT OAuth/MCP service.
 	 */
-	public function __construct( Environment $environment, Settings $settings, OAuth_Server $oauth_server ) {
+	public function __construct( Environment $environment, Settings $settings, ?OAuth_Server $oauth_server = null ) {
 		$this->environment  = $environment;
 		$this->settings     = $settings;
-		$this->oauth_server = $oauth_server;
+		$this->oauth_server = $oauth_server ? $oauth_server : new OAuth_Server();
 	}
 
 	/**
@@ -117,9 +117,7 @@ final class Settings_Page {
 					</tr>
 					<tr>
 						<th scope="row"><?php echo esc_html__( 'Public HTTPS', 'wp-native-builder-bridge' ); ?></th>
-						<td>
-							<?php echo $https_ready ? esc_html__( 'Ready', 'wp-native-builder-bridge' ) : esc_html__( 'Not ready — endpoint is not HTTPS', 'wp-native-builder-bridge' ); ?>
-						</td>
+						<td><?php echo $https_ready ? esc_html__( 'Ready', 'wp-native-builder-bridge' ) : esc_html__( 'Not ready — endpoint is not HTTPS', 'wp-native-builder-bridge' ); ?></td>
 					</tr>
 					<tr>
 						<th scope="row"><?php echo esc_html__( 'App MCP endpoint', 'wp-native-builder-bridge' ); ?></th>
