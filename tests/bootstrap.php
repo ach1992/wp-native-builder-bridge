@@ -131,6 +131,9 @@ function get_locale() { return 'en_US'; }
 function is_rtl() { return false; }
 function wp_timezone_string() { return 'UTC'; }
 function rest_url( $path = '' ) { return 'https://example.test/wp-json/' . ltrim( $path, '/' ); }
+function home_url( $path = '' ) { return 'https://example.test' . ( '' === $path ? '' : '/' . ltrim( $path, '/' ) ); }
+function untrailingslashit( $value ) { return rtrim( (string) $value, '/\\' ); }
+function wp_parse_url( $url, $component = -1 ) { return parse_url( $url, $component ); }
 function current_user_can( $capability ) { return ! empty( $GLOBALS['wpnb_test']['capabilities'][ $capability ] ); }
 function get_current_user_id() { return (int) $GLOBALS['wpnb_test']['user_id']; }
 function get_option( $name, $default = false ) { return array_key_exists( $name, $GLOBALS['wpnb_test']['options'] ) ? $GLOBALS['wpnb_test']['options'][ $name ] : $default; }
