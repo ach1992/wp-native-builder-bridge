@@ -62,7 +62,8 @@ for test in \
     issue5-hardening-smoke.php \
     issue6-http-transport-smoke.php \
     issue6-direct-oauth-smoke.php \
-    issue6-direct-oauth-negative-smoke.php
+    issue6-direct-oauth-negative-smoke.php \
+    issue6-direct-mcp-tools-smoke.php
 do
     echo "== ${test} =="
     "${wp[@]}" eval-file "wp-content/plugins/wp-native-builder-bridge/tests/integration/${test}" --user=1 --allow-root
