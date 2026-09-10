@@ -17,13 +17,6 @@ use WP_Error;
  */
 final class Content_Abilities {
 	/**
-	 * Existing Ability resolver.
-	 *
-	 * @var Ability_Resolver
-	 */
-	private $resolver;
-
-	/**
 	 * Bridge permission service.
 	 *
 	 * @var Permissions
@@ -40,37 +33,33 @@ final class Content_Abilities {
 	/**
 	 * Creates the content Ability provider.
 	 *
-	 * @param Ability_Resolver $resolver    Existing Ability resolver.
-	 * @param Permissions      $permissions Bridge permission service.
-	 * @param Mutation_Log     $log         Mutation logger.
+	 * @param Permissions  $permissions Bridge permission service.
+	 * @param Mutation_Log $log         Mutation logger.
 	 */
-	public function __construct( Ability_Resolver $resolver, Permissions $permissions, Mutation_Log $log ) {
-		$this->resolver    = $resolver;
+	public function __construct( Permissions $permissions, Mutation_Log $log ) {
 		$this->permissions = $permissions;
 		$this->log         = $log;
 	}
 
 	/**
-	 * Registers content abilities, omitting the Bridge read fallback when a compatible upstream read Ability exists.
+	 * Registers the Bridge-owned generic content abilities.
 	 *
 	 * @return void
 	 */
 	public function register() {
-		if ( ! $this->resolver->find( array( 'core/read-content' ), array( 'post_type', 'fields' ) ) ) {
-			wp_register_ability(
-				'wp-native-builder/content-read',
-				array(
-					'label'               => __( 'Read Content', 'wp-native-builder-bridge' ),
-					'description'         => __( 'Lists or retrieves posts, pages, and editable custom post types through WordPress APIs.', 'wp-native-builder-bridge' ),
-					'category'            => Registrar::CATEGORY,
-					'input_schema'        => $this->read_input_schema(),
-					'output_schema'       => $this->read_output_schema(),
-					'execute_callback'    => array( $this, 'read' ),
-					'permission_callback' => array( $this, 'can_read' ),
-					'meta'                => $this->meta( true, false, true ),
-				)
-			);
-		}
+		wp_register_ability(
+			'wp-native-builder/content-read',
+			array(
+				'label'               => __( 'Read Content', 'wp-native-builder-bridge' ),
+				'description'         => __( 'Lists or retrieves posts, pages, and editable custom post types through WordPress APIs.', 'wp-native-builder-bridge' ),
+				'category'            => Registrar::CATEGORY,
+				'input_schema'        => $this->read_input_schema(),
+				'output_schema'       => $this->read_output_schema(),
+				'execute_callback'    => array( $this, 'read' ),
+				'permission_callback' => array( $this, 'can_read' ),
+				'meta'                => $this->meta( true, false, true ),
+			)
+		);
 
 		wp_register_ability(
 			'wp-native-builder/content-upsert',
@@ -167,13 +156,13 @@ final class Content_Abilities {
 							'type'      => 'string',
 							'minLength' => 1,
 						),
-						'expected_content_hash' => array(
+						'expected_state_hash' => array(
 							'type'      => 'string',
 							'minLength' => 64,
 							'maxLength' => 64,
 						),
 					),
-					'required'             => array( 'post_id', 'revision_id', 'expected_modified_gmt', 'expected_content_hash' ),
+					'required'             => array( 'post_id', 'revision_id', 'expected_modified_gmt', 'expected_state_hash' ),
 					'additionalProperties' => false,
 				),
 				'output_schema'       => $this->item_schema( true ),
@@ -206,6 +195,9 @@ final class Content_Abilities {
 
 		$action = isset( $input['action'] ) ? (string) $input['action'] : '';
 		$status = isset( $input['status'] ) ? (string) $input['status'] : '';
+		if ( '' !== $status && ! $this->valid_authoring_status( $status ) ) {
+			return false;
+		}
 
 		if ( 'create' === $action ) {
 			$type = isset( $input['post_type'] ) ? (string) $input['post_type'] : '';
@@ -366,19 +358,12 @@ final class Content_Abilities {
 		$id      = ! empty( $input['id'] ) ? (int) $input['id'] : 0;
 		$post    = $id ? get_post( $id ) : null;
 
-		if ( 'update' === $action ) {
-			if ( ! $post ) {
-				return $this->logged_error( $ability, 'content_not_found', __( 'The content to update does not exist.', 'wp-native-builder-bridge' ), $id );
-			}
-			$conflict = $this->check_expected_identity(
-				$post,
-				isset( $input['expected_modified_gmt'] ) ? $input['expected_modified_gmt'] : '',
-				isset( $input['expected_content_hash'] ) ? $input['expected_content_hash'] : ''
-			);
-			if ( is_wp_error( $conflict ) ) {
-				$this->log->record( $ability, 'post', $id, false, $conflict->get_error_code() );
-				return $conflict;
-			}
+		if ( 'update' === $action && ! $post ) {
+			return $this->logged_error( $ability, 'content_not_found', __( 'The content to update does not exist.', 'wp-native-builder-bridge' ), $id );
+		}
+
+		if ( isset( $input['status'] ) && ! $this->valid_authoring_status( (string) $input['status'] ) ) {
+			return $this->logged_error( $ability, 'invalid_content_status', __( 'status must be a registered authoring status and cannot be a destructive or internal status.', 'wp-native-builder-bridge' ), $id );
 		}
 
 		$type = 'create' === $action ? (string) $input['post_type'] : $post->post_type;
@@ -423,6 +408,19 @@ final class Content_Abilities {
 		}
 		if ( array_key_exists( 'template', $input ) ) {
 			$data['page_template'] = (string) $input['template'];
+		}
+
+		if ( 'update' === $action ) {
+			$post     = get_post( $id );
+			$conflict = $this->check_expected_identity(
+				$post,
+				isset( $input['expected_modified_gmt'] ) ? $input['expected_modified_gmt'] : '',
+				isset( $input['expected_state_hash'] ) ? $input['expected_state_hash'] : ''
+			);
+			if ( is_wp_error( $conflict ) ) {
+				$this->log->record( $ability, 'post', $id, false, $conflict->get_error_code() );
+				return $conflict;
+			}
 		}
 
 		$result = 'create' === $action ? wp_insert_post( $data, true ) : wp_update_post( $data, true );
@@ -515,7 +513,8 @@ final class Content_Abilities {
 		if ( ! $post || ! $revision || (int) $revision->post_parent !== $post_id ) {
 			return $this->logged_error( $ability, 'revision_not_found', __( 'The requested revision does not belong to this content object.', 'wp-native-builder-bridge' ), $post_id );
 		}
-		$conflict = $this->check_expected_identity( $post, (string) $input['expected_modified_gmt'], (string) $input['expected_content_hash'] );
+		$post     = get_post( $post_id );
+		$conflict = $this->check_expected_identity( $post, (string) $input['expected_modified_gmt'], (string) $input['expected_state_hash'] );
 		if ( is_wp_error( $conflict ) ) {
 			$this->log->record( $ability, 'post', $post_id, false, $conflict->get_error_code() );
 			return $conflict;
@@ -567,41 +566,71 @@ final class Content_Abilities {
 	 * @return object|null Editable post-type object, or null.
 	 */
 	private function editable_post_type( $type ) {
-		if ( ! is_string( $type ) || '' === $type || 'attachment' === $type ) {
-			return null;
-		}
-		$obj = get_post_type_object( $type );
-		if ( ! $obj || empty( $obj->cap ) || ( empty( $obj->show_ui ) && empty( $obj->show_in_rest ) ) ) {
-			return null;
-		}
-		return $obj;
+		return Content_Eligibility::post_type_object( $type );
 	}
 
 	/**
-	 * Checks both timestamp and content fingerprint for overwrite-sensitive operations.
+	 * Checks the observed timestamp and mutation-relevant state fingerprint immediately before a full write.
 	 *
 	 * @param object $post              Post object.
 	 * @param mixed  $expected_modified Expected modified GMT.
-	 * @param mixed  $expected_hash     Expected SHA-256 content hash.
+	 * @param mixed  $expected_hash     Expected SHA-256 state hash.
 	 * @return true|WP_Error
 	 */
 	private function check_expected_identity( $post, $expected_modified, $expected_hash ) {
-		if ( ! is_string( $expected_modified ) || '' === $expected_modified || ! is_string( $expected_hash ) || 64 !== strlen( $expected_hash ) ) {
-			return new WP_Error( 'expected_identity_required', __( 'expected_modified_gmt and expected_content_hash are required for overwrite-sensitive updates.', 'wp-native-builder-bridge' ) );
+		if ( ! $post || ! is_string( $expected_modified ) || '' === $expected_modified || ! is_string( $expected_hash ) || 64 !== strlen( $expected_hash ) ) {
+			return new WP_Error( 'expected_identity_required', __( 'expected_modified_gmt and expected_state_hash are required for overwrite-sensitive full-content updates.', 'wp-native-builder-bridge' ) );
 		}
 
-		$current_hash = hash( 'sha256', (string) $post->post_content );
+		$current_hash = $this->state_hash( $post );
 		if ( (string) $post->post_modified_gmt !== $expected_modified || $current_hash !== $expected_hash ) {
 			return new WP_Error(
 				'stale_content_conflict',
-				__( 'The content changed after it was inspected. Refresh it before applying this update.', 'wp-native-builder-bridge' ),
+				__( 'The content state changed after it was inspected. Refresh it before applying this update.', 'wp-native-builder-bridge' ),
 				array(
 					'current_modified_gmt' => (string) $post->post_modified_gmt,
-					'current_content_hash' => $current_hash,
+					'current_state_hash'   => $current_hash,
 				)
 			);
 		}
 		return true;
+	}
+
+	/**
+	 * Builds the deterministic identity for every field content-upsert may overwrite.
+	 *
+	 * @param object $post Post object.
+	 * @return string SHA-256 state fingerprint.
+	 */
+	private function state_hash( $post ) {
+		$state = array(
+			'title'          => (string) $post->post_title,
+			'content'        => (string) $post->post_content,
+			'excerpt'        => (string) $post->post_excerpt,
+			'status'         => (string) $post->post_status,
+			'slug'           => (string) $post->post_name,
+			'parent_id'      => (int) $post->post_parent,
+			'menu_order'     => (int) $post->menu_order,
+			'template'       => function_exists( 'get_page_template_slug' ) ? (string) get_page_template_slug( $post->ID ) : '',
+			'featured_media' => function_exists( 'get_post_thumbnail_id' ) ? (int) get_post_thumbnail_id( $post->ID ) : 0,
+		);
+
+		return hash( 'sha256', wp_json_encode( $state ) );
+	}
+
+	/**
+	 * Accepts only registered authoring statuses and excludes destructive/internal Core states.
+	 *
+	 * @param string $status Requested post status.
+	 * @return bool Whether ordinary content upsert may target the status.
+	 */
+	private function valid_authoring_status( $status ) {
+		$status = (string) $status;
+		if ( '' === $status || in_array( $status, array( 'trash', 'auto-draft', 'inherit' ), true ) ) {
+			return false;
+		}
+
+		return function_exists( 'get_post_status_object' ) && (bool) get_post_status_object( $status );
 	}
 
 	/**
@@ -625,6 +654,7 @@ final class Content_Abilities {
 			'template'       => function_exists( 'get_page_template_slug' ) ? (string) get_page_template_slug( $post->ID ) : '',
 			'featured_media' => function_exists( 'get_post_thumbnail_id' ) ? (int) get_post_thumbnail_id( $post->ID ) : 0,
 			'content_hash'   => hash( 'sha256', (string) $post->post_content ),
+			'state_hash'     => $this->state_hash( $post ),
 		);
 		if ( $include_content ) {
 			$item['content'] = (string) $post->post_content;
@@ -758,7 +788,7 @@ final class Content_Abilities {
 					'minimum' => 0,
 				),
 				'expected_modified_gmt' => array( 'type' => 'string' ),
-				'expected_content_hash' => array(
+				'expected_state_hash' => array(
 					'type'      => 'string',
 					'minLength' => 64,
 					'maxLength' => 64,
@@ -812,9 +842,10 @@ final class Content_Abilities {
 			'template'       => array( 'type' => 'string' ),
 			'featured_media' => array( 'type' => 'integer' ),
 			'content_hash'   => array( 'type' => 'string' ),
+			'state_hash'     => array( 'type' => 'string' ),
 			'content'        => array( 'type' => 'string' ),
 		);
-		$required   = array( 'id', 'post_type', 'status', 'slug', 'title', 'excerpt', 'modified_gmt', 'parent_id', 'menu_order', 'template', 'featured_media', 'content_hash' );
+		$required   = array( 'id', 'post_type', 'status', 'slug', 'title', 'excerpt', 'modified_gmt', 'parent_id', 'menu_order', 'template', 'featured_media', 'content_hash', 'state_hash' );
 		if ( $content_required ) {
 			$required[] = 'content';
 		}

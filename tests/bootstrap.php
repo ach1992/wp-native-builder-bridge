@@ -135,6 +135,7 @@ function wp_get_theme() { return new WP_Native_Builder_Test_Theme( $GLOBALS['wpn
 function wp_is_block_theme() { return ! empty( $GLOBALS['wpnb_test']['theme']['block'] ); }
 function get_plugins() { return $GLOBALS['wpnb_test']['plugins']; }
 function get_post_types( $args = array(), $output = 'names' ) { return 'objects' === $output ? $GLOBALS['wpnb_test']['post_types'] : array_keys( $GLOBALS['wpnb_test']['post_types'] ); }
+function get_post_type_object( $post_type ) { return isset( $GLOBALS['wpnb_test']['post_types'][ $post_type ] ) ? $GLOBALS['wpnb_test']['post_types'][ $post_type ] : null; }
 function post_type_supports( $post_type, $feature ) { return ! empty( $GLOBALS['wpnb_test']['post_type_supports'][ $post_type ][ $feature ] ); }
 function get_taxonomies( $args = array(), $output = 'names' ) { return 'objects' === $output ? $GLOBALS['wpnb_test']['taxonomies'] : array_keys( $GLOBALS['wpnb_test']['taxonomies'] ); }
 

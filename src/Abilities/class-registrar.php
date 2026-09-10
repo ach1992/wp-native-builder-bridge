@@ -68,6 +68,27 @@ final class Registrar {
 	private $block_abilities;
 
 	/**
+	 * Media Library provider.
+	 *
+	 * @var Media_Abilities
+	 */
+	private $media_abilities;
+
+	/**
+	 * Taxonomy provider.
+	 *
+	 * @var Taxonomy_Abilities
+	 */
+	private $taxonomy_abilities;
+
+	/**
+	 * Navigation provider.
+	 *
+	 * @var Navigation_Abilities
+	 */
+	private $navigation_abilities;
+
+	/**
 	 * Creates the registrar.
 	 *
 	 * @param Environment $environment Runtime dependency inspector.
@@ -75,14 +96,17 @@ final class Registrar {
 	 * @param Permissions $permissions Ability permission service.
 	 */
 	public function __construct( Environment $environment, Settings $settings, Permissions $permissions ) {
-		$this->environment       = $environment;
-		$this->settings          = $settings;
-		$this->permissions       = $permissions;
-		$this->resolver          = new Ability_Resolver();
-		$mutation_log            = new Mutation_Log();
-		$this->site_abilities    = new Site_Abilities( $this->resolver, $this->permissions );
-		$this->content_abilities = new Content_Abilities( $this->resolver, $this->permissions, $mutation_log );
-		$this->block_abilities   = new Block_Abilities( $this->permissions, $mutation_log );
+		$this->environment          = $environment;
+		$this->settings             = $settings;
+		$this->permissions          = $permissions;
+		$this->resolver             = new Ability_Resolver();
+		$mutation_log               = new Mutation_Log();
+		$this->site_abilities       = new Site_Abilities( $this->resolver, $this->permissions );
+		$this->content_abilities    = new Content_Abilities( $this->permissions, $mutation_log );
+		$this->block_abilities      = new Block_Abilities( $this->permissions, $mutation_log );
+		$this->media_abilities      = new Media_Abilities( $this->permissions, $mutation_log );
+		$this->taxonomy_abilities   = new Taxonomy_Abilities( $this->permissions, $mutation_log );
+		$this->navigation_abilities = new Navigation_Abilities( $this->permissions, $mutation_log );
 	}
 
 	/**
@@ -165,6 +189,9 @@ final class Registrar {
 		$this->site_abilities->register();
 		$this->content_abilities->register();
 		$this->block_abilities->register();
+		$this->media_abilities->register();
+		$this->taxonomy_abilities->register();
+		$this->navigation_abilities->register();
 	}
 
 	/**

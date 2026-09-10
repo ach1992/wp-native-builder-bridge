@@ -286,7 +286,6 @@ final class Site_Abilities {
 			'site_info'        => array( array( 'core/get-site-info' ), array() ),
 			'user_info'        => array( array( 'core/get-user-info' ), array() ),
 			'environment_info' => array( array( 'core/get-environment-info' ), array() ),
-			'content_read'     => array( array( 'core/read-content' ), array( 'post_type', 'fields' ) ),
 		);
 		$result = array();
 
@@ -388,9 +387,8 @@ final class Site_Abilities {
 				'site_info'        => array( 'type' => 'string' ),
 				'user_info'        => array( 'type' => 'string' ),
 				'environment_info' => array( 'type' => 'string' ),
-				'content_read'     => array( 'type' => 'string' ),
 			),
-			array( 'site_info', 'user_info', 'environment_info', 'content_read' )
+			array( 'site_info', 'user_info', 'environment_info' )
 		);
 		$external_item = $closed_object(
 			array(

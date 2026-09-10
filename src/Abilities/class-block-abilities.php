@@ -93,10 +93,14 @@ final class Block_Abilities {
 	 * @return bool Whether the current user may read the target blocks.
 	 */
 	public function can_read( $input ) {
-		return is_array( $input )
-			&& ! empty( $input['post_id'] )
-			&& $this->permissions->allowed( Settings::GROUP_SITE_READ, 'read' )
-			&& current_user_can( 'read_post', (int) $input['post_id'] );
+		if ( ! is_array( $input ) || empty( $input['post_id'] ) || ! $this->permissions->allowed( Settings::GROUP_SITE_READ, 'read' ) ) {
+			return false;
+		}
+
+		$post = get_post( (int) $input['post_id'] );
+		return $post
+			&& Content_Eligibility::supports_blocks( $post->post_type )
+			&& current_user_can( 'read_post', $post->ID );
 	}
 
 	/**
@@ -111,7 +115,7 @@ final class Block_Abilities {
 		}
 
 		$post = get_post( (int) $input['post_id'] );
-		if ( ! $post || ! current_user_can( 'edit_post', $post->ID ) ) {
+		if ( ! $post || ! Content_Eligibility::supports_blocks( $post->post_type ) || ! current_user_can( 'edit_post', $post->ID ) ) {
 			return false;
 		}
 
@@ -133,8 +137,8 @@ final class Block_Abilities {
 	 */
 	public function read( $input ) {
 		$post = get_post( (int) $input['post_id'] );
-		if ( ! $post ) {
-			return new WP_Error( 'content_not_found', __( 'The requested content does not exist.', 'wp-native-builder-bridge' ) );
+		if ( ! $post || ! Content_Eligibility::supports_blocks( $post->post_type ) ) {
+			return new WP_Error( 'unsupported_block_target', __( 'The requested content type is not eligible for generic Gutenberg operations.', 'wp-native-builder-bridge' ) );
 		}
 
 		return $this->format_tree( $post );
@@ -150,8 +154,8 @@ final class Block_Abilities {
 		$ability = 'wp-native-builder/blocks-mutate';
 		$post_id = (int) $input['post_id'];
 		$post    = get_post( $post_id );
-		if ( ! $post ) {
-			return $this->logged_error( 'content_not_found', __( 'The requested content does not exist.', 'wp-native-builder-bridge' ), $post_id );
+		if ( ! $post || ! Content_Eligibility::supports_blocks( $post->post_type ) ) {
+			return $this->logged_error( 'unsupported_block_target', __( 'The requested content type is not eligible for generic Gutenberg operations.', 'wp-native-builder-bridge' ), $post_id );
 		}
 
 		$current_hash = hash( 'sha256', (string) $post->post_content );

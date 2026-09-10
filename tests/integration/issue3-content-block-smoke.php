@@ -87,6 +87,7 @@ $created = $upsert->execute(
 wpnb_issue3_assert( ! is_wp_error( $created ), 'Draft create failed: ' . wpnb_issue3_error_code( $created ) );
 wpnb_issue3_assert( 'wpnb_book' === $created['post_type'], 'Generic CPT create returned the wrong post type.' );
 wpnb_issue3_assert( 'draft' === $created['status'], 'Draft create returned the wrong status.' );
+wpnb_issue3_assert( isset( $created['state_hash'] ) && 64 === strlen( $created['state_hash'] ), 'Content create did not expose the full mutation state fingerprint.' );
 $post_id = (int) $created['id'];
 
 $read = $content_read->execute(
@@ -161,7 +162,7 @@ $stale_upsert = $upsert->execute(
 		'id'                    => $post_id,
 		'title'                 => 'Should Not Apply',
 		'expected_modified_gmt' => $created['modified_gmt'],
-		'expected_content_hash' => $created['content_hash'],
+		'expected_state_hash'   => $created['state_hash'],
 	)
 );
 wpnb_issue3_assert( is_wp_error( $stale_upsert ) && 'stale_content_conflict' === $stale_upsert->get_error_code(), 'Content update did not reject a stale content hash.' );
@@ -175,7 +176,7 @@ $updated = $upsert->execute(
 		'id'                    => $post_id,
 		'title'                 => 'Issue 3 Updated',
 		'expected_modified_gmt' => $fresh_item['modified_gmt'],
-		'expected_content_hash' => $fresh_item['content_hash'],
+		'expected_state_hash'   => $fresh_item['state_hash'],
 	)
 );
 wpnb_issue3_assert( ! is_wp_error( $updated ) && 'Issue 3 Updated' === $updated['title'], 'Fresh content update failed.' );
@@ -198,7 +199,7 @@ $publish_denied = $upsert->execute(
 		'id'                    => $post_id,
 		'status'                => 'publish',
 		'expected_modified_gmt' => $fresh_item['modified_gmt'],
-		'expected_content_hash' => $fresh_item['content_hash'],
+		'expected_state_hash'   => $fresh_item['state_hash'],
 	)
 );
 wpnb_issue3_assert( is_wp_error( $publish_denied ), 'Publishing bypassed the disabled Live Content group.' );
@@ -211,7 +212,7 @@ $published = $upsert->execute(
 		'id'                    => $post_id,
 		'status'                => 'publish',
 		'expected_modified_gmt' => $fresh_item['modified_gmt'],
-		'expected_content_hash' => $fresh_item['content_hash'],
+		'expected_state_hash'   => $fresh_item['state_hash'],
 	)
 );
 wpnb_issue3_assert( ! is_wp_error( $published ) && 'publish' === $published['status'], 'Publishing failed after Live Content was enabled: ' . wpnb_issue3_error_code( $published ) . ( is_wp_error( $published ) ? ' / ' . $published->get_error_message() : '' ) );
@@ -243,7 +244,7 @@ $restored = $revision_restore->execute(
 		'post_id'               => $post_id,
 		'revision_id'           => (int) $revisions[0]['id'],
 		'expected_modified_gmt' => $current_item['modified_gmt'],
-		'expected_content_hash' => $current_item['content_hash'],
+		'expected_state_hash'   => $current_item['state_hash'],
 	)
 );
 wpnb_issue3_assert( ! is_wp_error( $restored ), 'Revision restore failed: ' . wpnb_issue3_error_code( $restored ) );
