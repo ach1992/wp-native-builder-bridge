@@ -9,6 +9,7 @@ namespace WP_Native_Builder_Bridge;
 
 use WP_Native_Builder_Bridge\Abilities\Registrar;
 use WP_Native_Builder_Bridge\Admin\Settings_Page;
+use WP_Native_Builder_Bridge\Auth\OAuth_Server;
 use WP_Native_Builder_Bridge\Support\Environment;
 use WP_Native_Builder_Bridge\Support\Permissions;
 use WP_Native_Builder_Bridge\Support\Settings;
@@ -60,6 +61,13 @@ final class Plugin {
 	private $registrar;
 
 	/**
+	 * Direct ChatGPT OAuth/MCP service.
+	 *
+	 * @var OAuth_Server
+	 */
+	private $oauth_server;
+
+	/**
 	 * Admin settings page.
 	 *
 	 * @var Settings_Page
@@ -99,7 +107,10 @@ final class Plugin {
 		$this->settings      = new Settings();
 		$this->permissions   = new Permissions( $this->settings );
 		$this->registrar     = new Registrar( $this->environment, $this->settings, $this->permissions );
-		$this->settings_page = new Settings_Page( $this->environment, $this->settings );
+		$this->oauth_server  = new OAuth_Server();
+		$this->settings_page = new Settings_Page( $this->environment, $this->settings, $this->oauth_server );
+
+		$this->oauth_server->boot();
 
 		add_action( 'admin_init', array( $this->settings, 'register' ) );
 		add_action( 'admin_menu', array( $this->settings_page, 'register_menu' ) );
@@ -132,6 +143,14 @@ final class Plugin {
 				esc_html__( 'WP Native Builder Bridge is active, but the official WordPress MCP Adapter is not available.', 'wp-native-builder-bridge' ),
 				esc_url( 'https://github.com/WordPress/mcp-adapter/releases/latest' ),
 				esc_html__( 'Install or activate MCP Adapter', 'wp-native-builder-bridge' )
+			);
+			return;
+		}
+
+		if ( ! $this->oauth_server->is_https_ready() ) {
+			printf(
+				'<div class="notice notice-warning"><p>%s</p></div>',
+				esc_html__( 'Direct ChatGPT App connections require the public WP Native Builder MCP endpoint to use HTTPS. Check the WordPress Site URL and reverse-proxy HTTPS configuration before creating the App.', 'wp-native-builder-bridge' )
 			);
 		}
 	}
