@@ -60,7 +60,8 @@ for test in \
     issue3-provider-smoke.php \
     issue4-core-admin-smoke.php \
     issue5-hardening-smoke.php \
-    issue6-http-transport-smoke.php
+    issue6-http-transport-smoke.php \
+    issue6-direct-oauth-smoke.php
 do
     echo "== ${test} =="
     "${wp[@]}" eval-file "wp-content/plugins/wp-native-builder-bridge/tests/integration/${test}" --user=1 --allow-root
@@ -98,6 +99,8 @@ fi
 echo "== release uninstall cleanup =="
 "${wp[@]}" option update wp_native_builder_bridge_settings '{"site_read":1}' --format=json --allow-root >/dev/null
 "${wp[@]}" option update wp_native_builder_bridge_recent_actions '[{"ability":"fixture"}]' --format=json --allow-root >/dev/null
+"${wp[@]}" option update wp_native_builder_bridge_oauth_instance '0123456789abcdef0123456789abcdef' --allow-root >/dev/null
+"${wp[@]}" transient set wpnb_oauth_chatgpt_cimd_ok 1 900 --allow-root >/dev/null
 "${wp[@]}" plugin uninstall wp-native-builder-bridge --deactivate --allow-root >/dev/null
 if "${wp[@]}" option get wp_native_builder_bridge_settings --allow-root >/dev/null 2>&1; then
     echo "ERROR: settings option survived plugin uninstall." >&2
@@ -105,6 +108,14 @@ if "${wp[@]}" option get wp_native_builder_bridge_settings --allow-root >/dev/nu
 fi
 if "${wp[@]}" option get wp_native_builder_bridge_recent_actions --allow-root >/dev/null 2>&1; then
     echo "ERROR: mutation-log option survived plugin uninstall." >&2
+    exit 1
+fi
+if "${wp[@]}" option get wp_native_builder_bridge_oauth_instance --allow-root >/dev/null 2>&1; then
+    echo "ERROR: OAuth installation identity survived plugin uninstall." >&2
+    exit 1
+fi
+if "${wp[@]}" transient get wpnb_oauth_chatgpt_cimd_ok --allow-root >/dev/null 2>&1; then
+    echo "ERROR: OAuth client-metadata cache survived plugin uninstall." >&2
     exit 1
 fi
 if "${wp[@]}" plugin is-installed wp-native-builder-bridge --allow-root >/dev/null 2>&1; then
