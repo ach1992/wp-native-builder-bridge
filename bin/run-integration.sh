@@ -114,7 +114,7 @@ if "${wp[@]}" option get wp_native_builder_bridge_oauth_instance --allow-root >/
     echo "ERROR: OAuth installation identity survived plugin uninstall." >&2
     exit 1
 fi
-if "${wp[@]}" transient get wpnb_oauth_chatgpt_cimd_ok --allow-root >/dev/null 2>&1; then
+if ! "${wp[@]}" eval 'if ( false !== get_transient("wpnb_oauth_chatgpt_cimd_ok") ) { exit(1); }' --allow-root >/dev/null; then
     echo "ERROR: OAuth client-metadata cache survived plugin uninstall." >&2
     exit 1
 fi
