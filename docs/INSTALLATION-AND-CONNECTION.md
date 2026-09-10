@@ -89,6 +89,7 @@ The Bridge advertises and enforces:
 - OAuth resource binding to the exact Bridge MCP endpoint;
 - ChatGPT Client ID Metadata Document support;
 - the stable ChatGPT production client identifier `https://chatgpt.com/oauth/client.json`;
+- ChatGPT `private_key_jwt` client authentication verified against the fixed `https://chatgpt.com/oauth/jwks.json` JWKS endpoint with `RS256`, bounded assertion lifetime, audience binding, and one-time `jti`;
 - the stable ChatGPT redirect URI used with authorization-response issuer identification;
 - short-lived Bearer access tokens;
 - least-privilege scope handling: an omitted `scope` defaults to `mcp:use` only;
@@ -112,7 +113,7 @@ In the ChatGPT workspace where Developer Mode is enabled:
 8. Review the WordPress consent page and choose **Authorize ChatGPT**.
 9. Return to ChatGPT and scan/refresh the tools if the UI does not do so automatically.
 
-Do not paste a WordPress password, Application Password, OAuth access token, or refresh token into the ChatGPT App form. The browser OAuth flow is responsible for token issuance.
+Do not paste a WordPress password, Application Password, OAuth access token, refresh token, client secret, or signing key into the ChatGPT App form. The Bridge validates ChatGPT's signed `private_key_jwt` automatically from the fixed ChatGPT JWKS endpoint; there is no key or client-secret field for the site owner to configure. The browser OAuth flow is responsible for token issuance.
 
 ## What ChatGPT should discover
 
@@ -155,7 +156,7 @@ ChatGPT must be able to reach the MCP endpoint and OAuth discovery endpoints fro
 - `/wp-json/` is reachable normally;
 - the Bridge MCP URL is not intercepted by a maintenance page, CDN login, WAF challenge, or HTTP Basic Auth;
 - `/.well-known/oauth-protected-resource` and `/.well-known/oauth-authorization-server` reach WordPress;
-- WordPress can make outbound HTTPS requests to `https://chatgpt.com/oauth/client.json` so the fixed ChatGPT Client ID Metadata Document can be verified.
+- WordPress can make outbound HTTPS requests to `https://chatgpt.com/oauth/client.json` and `https://chatgpt.com/oauth/jwks.json` so the fixed ChatGPT client metadata and signed-client keys can be verified.
 
 If a reverse proxy terminates TLS, WordPress must still generate `https://` URLs. Fix the standard WordPress/proxy HTTPS detection rather than hard-coding a different endpoint in the Bridge.
 
@@ -192,7 +193,7 @@ The Bridge does not own provider data. Updating it must not rewrite content mere
 
 Deactivation stops Bridge registration but does not delete site content, media, terms, users, provider objects, or provider data.
 
-The v0.1 uninstall handler removes the Bridge-owned per-site settings/mutation metadata and OAuth installation identity, and clears the cached ChatGPT client-metadata verification. Removing the OAuth installation identity makes previously issued OAuth artifacts invalid after reinstall even if an expired transient row remains in the database until normal WordPress cleanup.
+The v0.1 uninstall handler removes the Bridge-owned per-site settings/mutation metadata and OAuth installation identity, clears the cached ChatGPT client metadata/JWKS, removes short-lived client-assertion replay claims, and clears their cleanup events. Removing the OAuth installation identity also invalidates every previously issued Bridge OAuth artifact.
 
 It does not delete WordPress/provider content. The post-v0.1 Persistent Workspace has a separate retention contract: future Workspace data must not be silently added to this uninstall deletion path.
 

@@ -12,7 +12,9 @@ This is the release gate for Issue #6. Do not publish/tag merely because impleme
 - [ ] MCP Adapter default HTTP transport/session regression passes without changing that server's behavior.
 - [ ] Bridge direct MCP endpoint is registered through the official MCP Adapter `HttpTransport`.
 - [ ] protected-resource metadata advertises the exact direct MCP resource and WordPress authorization server.
-- [ ] authorization-server metadata advertises Authorization Code, PKCE `S256`, refresh tokens, CIMD, issuer identification, and the supported scopes.
+- [ ] authorization-server metadata advertises Authorization Code, PKCE `S256`, refresh tokens, CIMD, `private_key_jwt`/`RS256`, issuer identification, and the supported scopes.
+- [ ] ChatGPT CIMD is fetched only from the fixed client identifier and pins the expected `private_key_jwt` method plus fixed `https://chatgpt.com/oauth/jwks.json` JWKS URI.
+- [ ] signed client assertions validate `RS256`, `iss`/`sub`, authorization-server audience, bounded lifetime, and one-time `jti`; missing/tampered/replayed assertions fail closed.
 - [ ] missing/invalid direct-MCP credentials fail at HTTP authorization with a 401 OAuth discovery challenge.
 - [ ] authorization code + PKCE exchange passes and code replay fails.
 - [ ] access-token storage regression proves the bearer secret is not persisted in plaintext.
@@ -25,7 +27,7 @@ This is the release gate for Issue #6. Do not publish/tag merely because impleme
 - [ ] real Code Snippets 3.10.2 provider lane passes.
 - [ ] real Astra 4.13.11 native Ability reuse lane passes.
 - [ ] Gravity Forms GFAPI transport contract fixture passes and is explicitly reported as a contract fixture, not commercial-binary validation.
-- [ ] release uninstall removes Bridge v0.1 settings/mutation metadata/OAuth installation identity/client-metadata cache and does not delete site/provider content.
+- [ ] release uninstall removes Bridge v0.1 settings/mutation metadata, OAuth installation identity, CIMD/JWKS caches, client-assertion replay claims/cleanup events, and does not delete site/provider content.
 - [ ] CI is green on the exact release candidate SHA.
 - [ ] release ZIP artifact can be downloaded and its digest recorded.
 
@@ -47,7 +49,8 @@ This is the release gate for Issue #6. Do not publish/tag merely because impleme
 ## OAuth/security gate
 
 - [ ] The direct MCP URL, protected-resource metadata URL, authorization-server issuer, authorization endpoint, token endpoint, and redirect behavior are all HTTPS in the real public test deployment.
-- [ ] ChatGPT CIMD validation uses the fixed `https://chatgpt.com/oauth/client.json` identifier and does not fetch a caller-controlled metadata URL.
+- [ ] ChatGPT CIMD validation uses the fixed `https://chatgpt.com/oauth/client.json` identifier and fixed `https://chatgpt.com/oauth/jwks.json` signing-key URL; neither URL is caller-controlled and redirects are not followed.
+- [ ] Token and revocation endpoints require a valid ChatGPT `private_key_jwt` client assertion and reject unknown keys, invalid signatures, wrong issuer/subject/audience, expired/future assertions, and replayed `jti` values.
 - [ ] OAuth authorization responses return `iss` consistently when issuer-identification support is advertised.
 - [ ] Authorization redirect is restricted to the verified ChatGPT redirect URI; no caller-controlled open redirect exists.
 - [ ] PKCE accepts only `S256` and authorization codes are one-time/short-lived.

@@ -44,7 +44,8 @@ jq -e \
      and (.grant_types_supported | index("authorization_code") != null)
      and (.grant_types_supported | index("refresh_token") != null)
      and (.code_challenge_methods_supported == ["S256"])
-     and (.token_endpoint_auth_methods_supported | index("none") != null)' \
+     and (.token_endpoint_auth_methods_supported == ["private_key_jwt"])
+     and (.token_endpoint_auth_signing_alg_values_supported == ["RS256"])' \
     "$authorization_file" >/dev/null
 
 status="$(curl -sS \

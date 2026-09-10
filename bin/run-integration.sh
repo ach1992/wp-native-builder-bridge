@@ -117,6 +117,10 @@ echo "== release uninstall cleanup =="
 "${wp[@]}" option update wp_native_builder_bridge_recent_actions '[{"ability":"fixture"}]' --format=json --allow-root >/dev/null
 "${wp[@]}" option update wp_native_builder_bridge_oauth_instance '0123456789abcdef0123456789abcdef' --allow-root >/dev/null
 "${wp[@]}" transient set wpnb_oauth_chatgpt_cimd_ok 1 900 --allow-root >/dev/null
+"${wp[@]}" transient set wpnb_oauth_chatgpt_jwks '[{"kid":"fixture"}]' 900 --format=json --allow-root >/dev/null
+"${wp[@]}" transient set wpnb_oauth_chatgpt_jwks_refresh 1 60 --allow-root >/dev/null
+"${wp[@]}" option update wpnb_oauth_assertion_0123456789abcdef0123456789abcdef01234567 "$(date +%s)" --allow-root >/dev/null
+"${wp[@]}" cron event schedule wpnb_oauth_cleanup_client_assertion '+10 minutes' --allow-root >/dev/null
 "${wp[@]}" plugin uninstall wp-native-builder-bridge --deactivate --allow-root >/dev/null
 if "${wp[@]}" option get wp_native_builder_bridge_settings --allow-root >/dev/null 2>&1; then
     echo "ERROR: settings option survived plugin uninstall." >&2
@@ -132,6 +136,22 @@ if "${wp[@]}" option get wp_native_builder_bridge_oauth_instance --allow-root >/
 fi
 if ! "${wp[@]}" eval 'if ( false !== get_transient("wpnb_oauth_chatgpt_cimd_ok") ) { exit(1); }' --allow-root >/dev/null; then
     echo "ERROR: OAuth client-metadata cache survived plugin uninstall." >&2
+    exit 1
+fi
+if ! "${wp[@]}" eval 'if ( false !== get_transient("wpnb_oauth_chatgpt_jwks") ) { exit(1); }' --allow-root >/dev/null; then
+    echo "ERROR: OAuth JWKS cache survived plugin uninstall." >&2
+    exit 1
+fi
+if ! "${wp[@]}" eval 'if ( false !== get_transient("wpnb_oauth_chatgpt_jwks_refresh") ) { exit(1); }' --allow-root >/dev/null; then
+    echo "ERROR: OAuth JWKS refresh cooldown survived plugin uninstall." >&2
+    exit 1
+fi
+if "${wp[@]}" option get wpnb_oauth_assertion_0123456789abcdef0123456789abcdef01234567 --allow-root >/dev/null 2>&1; then
+    echo "ERROR: OAuth client-assertion replay claim survived plugin uninstall." >&2
+    exit 1
+fi
+if "${wp[@]}" cron event list --hook=wpnb_oauth_cleanup_client_assertion --field=hook --allow-root 2>/dev/null | grep -Fxq wpnb_oauth_cleanup_client_assertion; then
+    echo "ERROR: OAuth client-assertion cleanup event survived plugin uninstall." >&2
     exit 1
 fi
 if "${wp[@]}" plugin is-installed wp-native-builder-bridge --allow-root >/dev/null 2>&1; then

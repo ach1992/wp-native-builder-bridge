@@ -40,6 +40,13 @@ final class OAuth_Server {
 	private $store;
 
 	/**
+	 * ChatGPT signed-client assertion validator.
+	 *
+	 * @var Client_Assertion_Validator
+	 */
+	private $client_assertions;
+
+	/**
 	 * Request-local authentication state used to shape MCP HTTP challenges.
 	 *
 	 * @var string
@@ -52,7 +59,8 @@ final class OAuth_Server {
 	 * @param OAuth_Store|null $store Optional store override for tests.
 	 */
 	public function __construct( ?OAuth_Store $store = null ) {
-		$this->store = $store ? $store : new OAuth_Store();
+		$this->store             = $store ? $store : new OAuth_Store();
+		$this->client_assertions = new Client_Assertion_Validator( $this->store );
 	}
 
 	/**
@@ -64,6 +72,7 @@ final class OAuth_Server {
 		add_action( 'mcp_adapter_init', array( $this, 'register_mcp_server' ), 20, 1 );
 		add_action( 'rest_api_init', array( $this, 'register_oauth_routes' ), 20 );
 		add_action( 'parse_request', array( $this, 'maybe_handle_public_endpoint' ), 1 );
+		add_action( 'wpnb_oauth_cleanup_client_assertion', array( $this->store, 'cleanup_client_assertion' ), 10, 2 );
 		add_filter( 'rest_post_dispatch', array( $this, 'add_mcp_authentication_challenge' ), 10, 3 );
 	}
 
@@ -232,8 +241,10 @@ final class OAuth_Server {
 			'revocation_endpoint'                        => $this->revocation_endpoint_url(),
 			'authorization_response_iss_parameter_supported' => true,
 			'client_id_metadata_document_supported'      => true,
-			'token_endpoint_auth_methods_supported'      => array( 'none' ),
-			'revocation_endpoint_auth_methods_supported' => array( 'none' ),
+			'token_endpoint_auth_methods_supported'      => array( 'private_key_jwt' ),
+			'token_endpoint_auth_signing_alg_values_supported' => array( 'RS256' ),
+			'revocation_endpoint_auth_methods_supported' => array( 'private_key_jwt' ),
+			'revocation_endpoint_auth_signing_alg_values_supported' => array( 'RS256' ),
 			'grant_types_supported'                      => array( 'authorization_code', 'refresh_token' ),
 			'response_types_supported'                   => array( 'code' ),
 			'code_challenge_methods_supported'           => array( 'S256' ),
@@ -372,6 +383,15 @@ final class OAuth_Server {
 			return $this->oauth_error( 'invalid_request', 'OAuth token issuance requires an HTTPS MCP resource.' );
 		}
 
+		$client_auth = $this->client_assertions->validate(
+			$request,
+			self::CHATGPT_CLIENT_ID,
+			array( $this->token_endpoint_url(), $this->issuer_url() )
+		);
+		if ( is_wp_error( $client_auth ) ) {
+			return $this->oauth_error( $client_auth->get_error_code(), $client_auth->get_error_message() );
+		}
+
 		$grant_type = $this->bounded_param( $request, 'grant_type', 64 );
 		if ( 'authorization_code' === $grant_type ) {
 			return $this->exchange_authorization_code( $request );
@@ -385,7 +405,7 @@ final class OAuth_Server {
 	}
 
 	/**
-	 * Handles RFC 7009-style token revocation for public clients.
+	 * Handles RFC 7009-style token revocation for the authenticated ChatGPT client.
 	 *
 	 * @param \WP_REST_Request $request REST request.
 	 * @return \WP_REST_Response Empty success response.
@@ -393,6 +413,15 @@ final class OAuth_Server {
 	public function handle_revoke_request( $request ) {
 		if ( ! $this->is_https_ready() ) {
 			return $this->oauth_error( 'invalid_request', 'OAuth token revocation requires an HTTPS MCP resource.' );
+		}
+
+		$client_auth = $this->client_assertions->validate(
+			$request,
+			self::CHATGPT_CLIENT_ID,
+			array( $this->revocation_endpoint_url(), $this->token_endpoint_url(), $this->issuer_url() )
+		);
+		if ( is_wp_error( $client_auth ) ) {
+			return $this->oauth_error( $client_auth->get_error_code(), $client_auth->get_error_message() );
 		}
 
 		$token = $this->bounded_param( $request, 'token', 256 );
@@ -526,9 +555,10 @@ final class OAuth_Server {
 		$response = wp_safe_remote_get(
 			self::CHATGPT_CLIENT_ID,
 			array(
-				'timeout'     => 8,
-				'redirection' => 2,
-				'headers'     => array( 'Accept' => 'application/json' ),
+				'timeout'             => 8,
+				'redirection'         => 0,
+				'limit_response_size' => 65536,
+				'headers'             => array( 'Accept' => 'application/json' ),
 			)
 		);
 
@@ -541,10 +571,11 @@ final class OAuth_Server {
 			return new \WP_Error( 'invalid_client', 'ChatGPT client metadata is not valid JSON.' );
 		}
 
-		$redirects = isset( $metadata['redirect_uris'] ) && is_array( $metadata['redirect_uris'] ) ? $metadata['redirect_uris'] : array();
-		$grants    = isset( $metadata['grant_types'] ) && is_array( $metadata['grant_types'] ) ? $metadata['grant_types'] : array();
-		$responses = isset( $metadata['response_types'] ) && is_array( $metadata['response_types'] ) ? $metadata['response_types'] : array();
-		$methods   = isset( $metadata['token_endpoint_auth_methods_supported'] ) && is_array( $metadata['token_endpoint_auth_methods_supported'] ) ? $metadata['token_endpoint_auth_methods_supported'] : array();
+		$redirects   = isset( $metadata['redirect_uris'] ) && is_array( $metadata['redirect_uris'] ) ? $metadata['redirect_uris'] : array();
+		$grants      = isset( $metadata['grant_types'] ) && is_array( $metadata['grant_types'] ) ? $metadata['grant_types'] : array();
+		$responses   = isset( $metadata['response_types'] ) && is_array( $metadata['response_types'] ) ? $metadata['response_types'] : array();
+		$auth_method = isset( $metadata['token_endpoint_auth_method'] ) && is_string( $metadata['token_endpoint_auth_method'] ) ? $metadata['token_endpoint_auth_method'] : '';
+		$jwks_uri    = isset( $metadata['jwks_uri'] ) && is_string( $metadata['jwks_uri'] ) ? $metadata['jwks_uri'] : '';
 
 		if (
 			self::CHATGPT_CLIENT_ID !== ( $metadata['client_id'] ?? '' ) ||
@@ -552,7 +583,8 @@ final class OAuth_Server {
 			! in_array( 'authorization_code', $grants, true ) ||
 			! in_array( 'refresh_token', $grants, true ) ||
 			! in_array( 'code', $responses, true ) ||
-			! in_array( 'none', $methods, true )
+			'private_key_jwt' !== $auth_method ||
+			Client_Assertion_Validator::CHATGPT_JWKS_URI !== $jwks_uri
 		) {
 			return new \WP_Error( 'invalid_client', 'ChatGPT client metadata does not satisfy the supported OAuth profile.' );
 		}
@@ -641,6 +673,7 @@ final class OAuth_Server {
 	private function exchange_authorization_code( $request ) {
 		$code         = $this->bounded_param( $request, 'code', 256 );
 		$client_id    = $this->bounded_param( $request, 'client_id', 256 );
+		$client_id    = '' === $client_id ? self::CHATGPT_CLIENT_ID : $client_id;
 		$redirect_uri = $this->bounded_param( $request, 'redirect_uri', 512 );
 		$resource     = $this->bounded_param( $request, 'resource', 1024 );
 		$verifier     = $this->bounded_param( $request, 'code_verifier', 160 );
@@ -683,6 +716,7 @@ final class OAuth_Server {
 	private function exchange_refresh_token( $request ) {
 		$refresh_token = $this->bounded_param( $request, 'refresh_token', 256 );
 		$client_id     = $this->bounded_param( $request, 'client_id', 256 );
+		$client_id     = '' === $client_id ? self::CHATGPT_CLIENT_ID : $client_id;
 		$resource      = $this->bounded_param( $request, 'resource', 1024 );
 
 		if ( self::CHATGPT_CLIENT_ID !== $client_id ) {

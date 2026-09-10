@@ -115,6 +115,53 @@ final class OAuth_Store {
 	}
 
 	/**
+	 * Atomically claims one signed client-assertion JWT ID for its short lifetime.
+	 *
+	 * @param string $jti JWT ID.
+	 * @param int    $ttl Claim lifetime in seconds.
+	 * @return bool True only for the first successful claim.
+	 */
+	public function claim_client_assertion( $jti, $ttl ) {
+		if ( ! is_string( $jti ) || '' === $jti || strlen( $jti ) > 256 ) {
+			return false;
+		}
+
+		$ttl        = max( 1, min( 600, (int) $ttl ) );
+		$expires_at = time() + $ttl;
+		$key        = 'wpnb_oauth_assertion_' . substr( hash( 'sha256', $jti ), 0, 40 );
+		$existing   = get_option( $key, false );
+
+		if ( false !== $existing && (int) $existing <= time() ) {
+			delete_option( $key );
+		}
+
+		if ( ! add_option( $key, $expires_at, '', false ) ) {
+			return false;
+		}
+
+		wp_schedule_single_event( $expires_at + MINUTE_IN_SECONDS, 'wpnb_oauth_cleanup_client_assertion', array( $key, $expires_at ) );
+		return true;
+	}
+
+	/**
+	 * Removes one expired client-assertion replay claim created by this store.
+	 *
+	 * @param string $key             Stored option name.
+	 * @param int    $expected_expiry Expiry captured when the claim was created.
+	 * @return void
+	 */
+	public function cleanup_client_assertion( $key, $expected_expiry ) {
+		if ( ! is_string( $key ) || 1 !== preg_match( '/^wpnb_oauth_assertion_[a-f0-9]{40}$/', $key ) ) {
+			return;
+		}
+
+		$stored = get_option( $key, false );
+		if ( false !== $stored && (int) $stored === (int) $expected_expiry && (int) $stored <= time() ) {
+			delete_option( $key );
+		}
+	}
+
+	/**
 	 * Revokes one opaque artifact when its secret is valid.
 	 *
 	 * @param string $token Opaque artifact.
