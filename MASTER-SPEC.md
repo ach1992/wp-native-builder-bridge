@@ -525,7 +525,31 @@ The bridge must make these workflows possible when the relevant access group is 
 13. On a representative non-Astra/non-default site, generic content/CPT/taxonomy/media/block/navigation capabilities remain usable through standard WordPress contracts.
 14. When an installed provider has neither a suitable Ability nor a supported public API for a requested provider-specific operation, report the limitation cleanly without private-storage coupling.
 
-## 16. Non-goals
+## 16. Persistent Workspace and project continuity (post-v0.1)
+
+The companion `wp-native-builder` Skill has an accepted post-v0.1 requirement for WordPress-hosted project continuity. The detailed Bridge-owned storage/ability/admin contract lives in [`docs/PROJECT-WORKSPACE-ARCHITECTURE.md`](./docs/PROJECT-WORKSPACE-ARCHITECTURE.md). Issue #8 owns Bridge implementation and Bridge-local validation.
+
+This feature is a **post-v0.1 follow-on**. It does not expand or block the current v0.1 completion path in Issues #1–#6.
+
+Durable requirements:
+
+- Start with one persistent Workspace per WordPress site; do not build multi-workspace switching without demonstrated need.
+- Workspace stores only durable project intent, accepted decisions, lightweight tasks/progress, useful document context, blockers/review state, and target references. It is not a chat transcript, chain-of-thought store, worklog archive, or duplicate copy of live site content.
+- Live WordPress remains the source of truth for what actually exists. Workspace references/context never authorize blind overwrite of newer live content/configuration.
+- Prefer small WordPress-native private/internal storage for Workspace Documents and Tasks. If private custom post types are used, they must have no unintended public permalink/query/search/feed/navigation/editor exposure.
+- Workspace internal object types must be explicitly excluded from generic content and Gutenberg/block operations and reachable only through the dedicated Workspace contract. This depends on the safe generic content/CPT boundary owned by Issue #3; do not solve isolation with a heavyweight provider blacklist or policy engine.
+- Keep the logical public surface compact: `workspace-resume` for a small fresh-chat orientation packet, `workspace-document` for typed Markdown-document operations, and `workspace-task` for typed lightweight task operations. Exact names/schemas may be refined only when current WordPress Ability conventions materially justify it.
+- Task progress, review, and delivery are separate dimensions. Initial values are `todo | in_progress | blocked | done`, `not_required | pending | changes_requested | approved`, and `not_applicable | draft_preview | live`.
+- Overwrite-sensitive Workspace mutations must use Bridge-owned optimistic-concurrency identity independent of WordPress revision IDs, such as a monotonic object `version` plus deterministic `state_hash`; stale writes must be rejected before mutation.
+- **Workspace correctness and continuity must not depend on WordPress revisions existing.** Current Workspace state lives in the primary Workspace object. WordPress revisions may provide optional secondary history, but disabling or pruning revisions must not break resume, current state, or stale-write protection.
+- If required rollback/history must survive ordinary revision-cleaner plugins, keep only the needed bounded history as Bridge-managed private Workspace snapshot/version records that are not WordPress `revision` posts and apply an explicit retention policy. This does not claim protection from arbitrary database deletion; normal site/database backups remain the disaster-recovery boundary.
+- Bridge permissions remain distinct from conversational approval. Routine reversible Workspace writes use the appropriate Bridge access group and WordPress capability without inventing publish-style approval; live publishing and consequential site actions keep the companion Skill's approval rules.
+- Deactivation must preserve Workspace data. Uninstall must not silently erase it; delete-on-uninstall, if supported, is explicit/opt-in. Provide administrator export and clear/delete paths with appropriate capability/nonce/destructive safeguards.
+- Workspace must never become a generic secret store. Do not persist credentials, auth material, hidden model reasoning, arbitrary database dumps, or unnecessary customer/order/payment/financial data.
+- When Workspace is implemented, evolve administration into a recognizable top-level `WP Native Builder` area with Dashboard, Documents, Tasks, Activity, and Settings. Keep Activity/audit logging separate from Workspace memory. Initial human Workspace management should prioritize View, Export, and Clear rather than a large project-management UI.
+- Final connected fresh-chat recovery is coordinated with the companion Skill after both runtimes implement their side of the contract; do not claim Workspace support before code, tests, and real end-to-end evidence exist.
+
+## 17. Non-goals
 
 - Replacing WordPress authentication/authorization.
 - Building a hosted service.
@@ -539,8 +563,10 @@ The bridge must make these workflows possible when the relevant access group is 
 - Creating a complicated plugin UI or per-ability policy engine.
 - Mirroring every registered external Ability into the `wp-native-builder/*` namespace.
 - Building bespoke v0.1 integrations for every WordPress plugin/theme merely because it is installed.
+- Treating Workspace records as ordinary site content or exposing them through generic content/Gutenberg abilities.
+- Depending on WordPress revisions as the sole source of Workspace current state, concurrency identity, or required recovery history.
 
-## 17. Success criteria
+## 18. Success criteria
 
 The first complete release is successful when:
 
@@ -560,7 +586,9 @@ The first complete release is successful when:
 - no arbitrary execution or credential-retrieval backdoor is introduced;
 - core tests and CI pass and a normal installable WordPress plugin ZIP can be produced.
 
-## 18. Delivery strategy
+The Persistent Workspace is a separately tracked post-v0.1 outcome and is not required to declare the current v0.1 release complete.
+
+## 19. Delivery strategy
 
 Move in a small number of vertical slices rather than designing every class first:
 
@@ -574,3 +602,5 @@ Bootstrap + dependency + permissions
 ```
 
 The intended result is a small powerful bridge, not a large platform. Add complexity only when a real ability or verified interoperability requirement needs it. Reuse existing stable WordPress Abilities where that removes duplicate work without creating new dependency sprawl.
+
+After v0.1 is shipped, Persistent Workspace implementation/validation continues through Issue #8 and the detailed Workspace architecture without retroactively expanding the v0.1 release gate.
