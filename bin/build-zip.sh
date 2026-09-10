@@ -11,6 +11,7 @@ rm -rf "$stage_root"
 mkdir -p "$plugin_dir"
 
 cp "$root/wp-native-builder-bridge.php" "$plugin_dir/"
+cp "$root/uninstall.php" "$plugin_dir/"
 cp "$root/README.md" "$plugin_dir/"
 cp -R "$root/src" "$plugin_dir/src"
 rm -f "$zip_file"
@@ -45,6 +46,7 @@ $zip->close();
 mapfile -t entries < <(unzip -Z1 "$zip_file")
 required=(
     "wp-native-builder-bridge/wp-native-builder-bridge.php"
+    "wp-native-builder-bridge/uninstall.php"
     "wp-native-builder-bridge/src/class-plugin.php"
 )
 for path in "${required[@]}"; do
