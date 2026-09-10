@@ -22,8 +22,10 @@ if grep -R -nF '$wpdb' src --include='*.php'; then
     exit 1
 fi
 
-if grep -R -nE "['\"](server_path|file_path|package_url|shell_command|sql_query|application_password|session_token|access_token|api_secret)['\"][[:space:]]*=>" src --include='*.php'; then
-    echo "ERROR: forbidden generic path/command/secret schema field found in production source." >&2
+# These names are forbidden in AI-exposed Ability schemas. OAuth protocol responses
+# legitimately use access_token, but no OAuth bearer material may become an Ability input.
+if grep -R -nE "['\"](server_path|file_path|package_url|shell_command|sql_query|application_password|session_token|access_token|refresh_token|authorization_code|api_secret)['\"][[:space:]]*=>" src/Abilities --include='*.php'; then
+    echo "ERROR: forbidden generic path/command/secret schema field found in an exposed Ability." >&2
     exit 1
 fi
 
