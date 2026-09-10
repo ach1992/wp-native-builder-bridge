@@ -4,7 +4,6 @@
  * Description: Exposes typed, permission-checked WordPress abilities for AI-assisted site building.
  * Version: 0.1.0-dev
  * Requires at least: 6.9
- * Requires PHP: 7.4
  * Text Domain: wp-native-builder-bridge
  *
  * @package WP_Native_Builder_Bridge

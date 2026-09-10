@@ -81,6 +81,7 @@ See [`docs/PROJECT-WORKSPACE-ARCHITECTURE.md`](./docs/PROJECT-WORKSPACE-ARCHITEC
 | [`MASTER-SPEC.md`](./MASTER-SPEC.md) | Canonical project-level architecture, ability surface, permissions, reuse policy, constraints, and completion criteria |
 | [`docs/CORE-ABILITY-SAFETY-BOUNDARIES.md`](./docs/CORE-ABILITY-SAFETY-BOUNDARIES.md) | Canonical detailed v0.1 safety boundary for generic content/CPT eligibility, stale-write identity, destructive status/navigation rules, and verified Ability reuse |
 | [`docs/OPTIONAL-INTEGRATIONS-AND-ADMIN.md`](./docs/OPTIONAL-INTEGRATIONS-AND-ADMIN.md) | v0.1 provider reuse/fallback rules and bounded site settings, extensions, snippets, forms, users, and destructive administration |
+| [`docs/ABILITY-INVENTORY.md`](./docs/ABILITY-INVENTORY.md) | Complete v0.1 Bridge-owned Ability inventory, access-group/capability map, excluded generic surfaces, and optimistic-concurrency boundary |
 | [`docs/PROJECT-WORKSPACE-ARCHITECTURE.md`](./docs/PROJECT-WORKSPACE-ARCHITECTURE.md) | Accepted post-v0.1 Workspace storage, isolation, versioning, admin UX, and lifecycle architecture |
 | [Issue #1](https://github.com/ach1992/wp-native-builder-bridge/issues/1) | v0.1 program/outcome |
 | [Issue #2](https://github.com/ach1992/wp-native-builder-bridge/issues/2) | Plugin/MCP foundation and access controls |
@@ -116,7 +117,26 @@ The foundation has a dependency-free fast test runner:
 php tests/run.php
 ```
 
-Disposable WordPress environments with the official MCP Adapter can run the integration checks through WP-CLI:
+For the complete local quality gate, install development-only tooling and run:
+
+```bash
+composer install
+composer check
+```
+
+`composer check` runs PHP syntax checks, the dependency-free test suite, `WordPress-Core` plus `PHPCompatibilityWP` checks for the current PHP 8.4+ development baseline, the static safety-surface audit, and the installable ZIP validator. The resulting local package is `build/wp-native-builder-bridge.zip`. Composer and these quality tools are development dependencies only; they are not shipped in or required by the production plugin.
+
+The repository also contains a disposable Docker integration runner that installs WordPress, the pinned official MCP Adapter `v0.6.1`, and the current Bridge source into isolated volumes:
+
+```bash
+bash bin/run-integration.sh 6.9-php8.4-apache
+bash bin/run-integration.sh php8.4-apache
+RUN_OPTIONAL_PROVIDERS=1 bash bin/run-integration.sh php8.4-apache
+```
+
+The optional-provider lane installs the explicitly tested Code Snippets `3.10.2` and Astra `4.13.11` fixtures inside the disposable environment. GitHub Actions runs the same quality and integration gates on pull requests and `main`.
+
+Disposable WordPress environments with the official MCP Adapter can also run individual integration checks through WP-CLI:
 
 ```bash
 wp eval-file tests/integration/foundation-smoke.php --user=<administrator>
@@ -124,6 +144,7 @@ wp eval-file tests/integration/issue3-content-block-smoke.php --user=<administra
 wp eval-file tests/integration/issue3-safety-regressions.php --user=<administrator>
 wp eval-file tests/integration/issue3-provider-smoke.php --user=<administrator>
 wp eval-file tests/integration/issue4-core-admin-smoke.php --user=<administrator>
+wp eval-file tests/integration/issue5-hardening-smoke.php --user=<administrator>
 ```
 
 Optional provider fixtures have focused checks in `tests/integration/issue4-code-snippets-smoke.php` and `tests/integration/issue4-astra-reuse-smoke.php`. They are designed for disposable environments and skip cleanly when the relevant provider is unavailable. Astra's native Ability test assumes Astra is active and its own Abilities toggle is enabled; the Bridge never enables that setting itself.

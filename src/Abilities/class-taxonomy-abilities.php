@@ -429,7 +429,7 @@ final class Taxonomy_Abilities {
 		$ability  = 'wp-native-builder/term-delete';
 		$taxonomy = $this->editable_taxonomy( (string) $input['taxonomy'] );
 		$term_id  = (int) $input['term_id'];
-		$term = $taxonomy ? get_term( $term_id, $taxonomy->name ) : null;
+		$term     = $taxonomy ? get_term( $term_id, $taxonomy->name ) : null;
 		if ( ! $taxonomy || ! $term || is_wp_error( $term ) ) {
 			return $this->logged_error( $ability, 'term_not_found', __( 'The requested taxonomy term does not exist.', 'wp-native-builder-bridge' ), $term_id );
 		}

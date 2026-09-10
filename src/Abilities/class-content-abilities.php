@@ -156,7 +156,7 @@ final class Content_Abilities {
 							'type'      => 'string',
 							'minLength' => 1,
 						),
-						'expected_state_hash' => array(
+						'expected_state_hash'   => array(
 							'type'      => 'string',
 							'minLength' => 64,
 							'maxLength' => 64,
@@ -788,7 +788,7 @@ final class Content_Abilities {
 					'minimum' => 0,
 				),
 				'expected_modified_gmt' => array( 'type' => 'string' ),
-				'expected_state_hash' => array(
+				'expected_state_hash'   => array(
 					'type'      => 'string',
 					'minLength' => 64,
 					'maxLength' => 64,
