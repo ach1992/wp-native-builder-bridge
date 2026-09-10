@@ -11,12 +11,12 @@ namespace WP_Native_Builder_Bridge\Auth;
  * Provides a WordPress-native OAuth 2.1 compatibility layer for direct ChatGPT MCP Apps.
  */
 final class OAuth_Server {
-	const MCP_SERVER_ID        = 'wp-native-builder-direct';
-	const MCP_ROUTE_NAMESPACE  = 'wp-native-builder/v1';
-	const MCP_ROUTE            = 'mcp';
-	const MCP_REQUEST_ROUTE    = '/wp-native-builder/v1/mcp';
-	const AUTHORIZATION_PATH   = '/wp-native-builder/oauth/authorize';
-	const PROTECTED_META_PATH  = '/.well-known/oauth-protected-resource';
+	const MCP_SERVER_ID         = 'wp-native-builder-direct';
+	const MCP_ROUTE_NAMESPACE   = 'wp-native-builder/v1';
+	const MCP_ROUTE             = 'mcp';
+	const MCP_REQUEST_ROUTE     = '/wp-native-builder/v1/mcp';
+	const AUTHORIZATION_PATH    = '/wp-native-builder/oauth/authorize';
+	const PROTECTED_META_PATH   = '/.well-known/oauth-protected-resource';
 	const AUTH_SERVER_META_PATH = '/.well-known/oauth-authorization-server';
 
 	const CHATGPT_CLIENT_ID    = 'https://chatgpt.com/oauth/client.json';
@@ -51,7 +51,7 @@ final class OAuth_Server {
 	 *
 	 * @param OAuth_Store|null $store Optional store override for tests.
 	 */
-	public function __construct( OAuth_Store $store = null ) {
+	public function __construct( ?OAuth_Store $store = null ) {
 		$this->store = $store ? $store : new OAuth_Store();
 	}
 
@@ -226,18 +226,18 @@ final class OAuth_Server {
 	 */
 	public function authorization_server_metadata() {
 		return array(
-			'issuer'                                      => $this->issuer_url(),
-			'authorization_endpoint'                      => $this->authorization_endpoint_url(),
-			'token_endpoint'                              => $this->token_endpoint_url(),
-			'revocation_endpoint'                         => $this->revocation_endpoint_url(),
+			'issuer'                                         => $this->issuer_url(),
+			'authorization_endpoint'                         => $this->authorization_endpoint_url(),
+			'token_endpoint'                                 => $this->token_endpoint_url(),
+			'revocation_endpoint'                            => $this->revocation_endpoint_url(),
 			'authorization_response_iss_parameter_supported' => true,
-			'client_id_metadata_document_supported'       => true,
-			'token_endpoint_auth_methods_supported'       => array( 'none' ),
-			'revocation_endpoint_auth_methods_supported'  => array( 'none' ),
-			'grant_types_supported'                       => array( 'authorization_code', 'refresh_token' ),
-			'response_types_supported'                    => array( 'code' ),
-			'code_challenge_methods_supported'            => array( 'S256' ),
-			'scopes_supported'                            => $this->supported_scopes(),
+			'client_id_metadata_document_supported'          => true,
+			'token_endpoint_auth_methods_supported'          => array( 'none' ),
+			'revocation_endpoint_auth_methods_supported'     => array( 'none' ),
+			'grant_types_supported'                          => array( 'authorization_code', 'refresh_token' ),
+			'response_types_supported'                       => array( 'code' ),
+			'code_challenge_methods_supported'               => array( 'S256' ),
+			'scopes_supported'                               => $this->supported_scopes(),
 		);
 	}
 
@@ -410,7 +410,7 @@ final class OAuth_Server {
 			wp_die( esc_html__( 'Method not allowed.', 'wp-native-builder-bridge' ), '', array( 'response' => 405 ) );
 		}
 
-		$params = array_map( 'wp_unslash', $_GET ); // phpcs:ignore WordPress.Security.NonceVerification.Recommended -- OAuth authorization requests are validated below and do not mutate state.
+		$params    = array_map( 'wp_unslash', $_GET ); // phpcs:ignore WordPress.Security.NonceVerification.Recommended -- OAuth authorization requests are validated below and do not mutate state.
 		$validated = $this->validate_authorization_request( $params );
 		if ( is_wp_error( $validated ) ) {
 			$this->authorization_failure( $validated, $params );
@@ -563,7 +563,7 @@ final class OAuth_Server {
 		}
 
 		$claims = $this->store->read( OAuth_Store::TYPE_CONSENT, $consent_id, true );
-		if ( false === $claims || empty( $claims['user_id'] ) || (int) $claims['user_id'] !== get_current_user_id() ) {
+		if ( false === $claims || empty( $claims['user_id'] ) || get_current_user_id() !== (int) $claims['user_id'] ) {
 			status_header( 400 );
 			wp_die( esc_html__( 'The OAuth consent request is invalid or expired.', 'wp-native-builder-bridge' ), '', array( 'response' => 400 ) );
 		}
