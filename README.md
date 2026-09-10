@@ -9,12 +9,15 @@ The bridge is the companion runtime for [`wp-native-builder`](https://github.com
 ```text
 AI / MCP client
   -> official WordPress MCP Adapter
-  -> WordPress Abilities API
-  -> WP Native Builder Bridge
-  -> WordPress / Gutenberg / optional integrations
+  -> WordPress Abilities API / registry
+       -> compatible abilities already provided by WordPress/plugins
+       -> WP Native Builder Bridge abilities for missing capabilities
+  -> WordPress / Gutenberg / optional site integrations
 ```
 
-The project does not implement MCP from scratch and does not require WPVibe or another paid/SaaS WordPress bridge.
+The default connection stack is intentionally small: **MCP Adapter + WP Native Builder Bridge**. The project does not require a collection of MCP servers, helper ability packs, WPVibe, or another paid/SaaS WordPress bridge.
+
+When WordPress Core or an already-installed plugin exposes a suitable stable Ability, the Bridge should prefer discovery/reuse over duplicating the same operation. If no suitable Ability exists, the Bridge fills that capability gap through supported WordPress/plugin APIs. Extra helper plugins are not installed merely to enlarge the AI tool catalogue.
 
 ## Target capabilities
 
@@ -23,8 +26,8 @@ The project does not implement MCP from scratch and does not require WPVibe or a
 - structured Gutenberg block inspection and targeted edits;
 - media, taxonomies, and navigation;
 - Astra/Astra Pro integration where supported public interfaces exist;
-- Gravity Forms through its supported public API;
-- Code Snippets Pro where a stable supported integration API can be verified, including managed PHP/CSS/JavaScript/HTML snippet lifecycle where supported;
+- Gravity Forms through its supported public API or suitable native Abilities when available;
+- Code Snippets Pro where a stable supported integration API/Ability can be verified, including managed PHP/CSS/JavaScript/HTML snippet lifecycle where supported;
 - site configuration;
 - plugin/theme lifecycle operations;
 - users/roles and destructive operations when explicitly enabled.
@@ -47,15 +50,19 @@ WordPress user capabilities and MCP transport authentication remain authoritativ
 ## Platform direction
 
 - WordPress 6.9+ (Abilities API)
-- official [`WordPress/mcp-adapter`](https://github.com/WordPress/mcp-adapter)
+- official [`WordPress/mcp-adapter`](https://github.com/WordPress/mcp-adapter) as the initial/default MCP transport
+- WP Native Builder Bridge as the project-specific capability layer
 - current WordPress/PHP development baseline, with exact minimum PHP support finalized from tested compatibility
+- no required helper MCP/ability-pack plugins
 - no production runtime dependency on Node.js, Docker, or an external service
+
+A future compatible transport may replace MCP Adapter if evidence shows that is a better supported path, but the normal architecture should use one transport rather than stacking overlapping MCP server plugins.
 
 ## Project map
 
 | Source | Purpose |
 |---|---|
-| [`MASTER-SPEC.md`](./MASTER-SPEC.md) | Canonical architecture, ability surface, permissions, constraints, and completion criteria |
+| [`MASTER-SPEC.md`](./MASTER-SPEC.md) | Canonical architecture, ability surface, permissions, reuse policy, constraints, and completion criteria |
 | [Issue #1](https://github.com/ach1992/wp-native-builder-bridge/issues/1) | v0.1 program/outcome |
 | [Issue #2](https://github.com/ach1992/wp-native-builder-bridge/issues/2) | Plugin/MCP foundation and access controls |
 | [Issue #3](https://github.com/ach1992/wp-native-builder-bridge/issues/3) | Core WordPress/Gutenberg/media/navigation abilities |
@@ -68,7 +75,7 @@ WordPress user capabilities and MCP transport authentication remain authoritativ
 
 ```text
 #2 foundation + permissions
-  -> #3 core site-building abilities
+  -> #3 ability reuse + core site-building abilities
   -> #4 optional integrations + advanced admin
   -> #5 contract/permission hardening + CI
   -> #6 real ChatGPT MCP test + release
