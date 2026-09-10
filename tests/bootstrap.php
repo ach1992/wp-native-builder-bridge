@@ -6,15 +6,27 @@ define( 'WP_NATIVE_BUILDER_BRIDGE_VERSION', '0.1.0-dev' );
 
 $GLOBALS['wp_version'] = '7.1';
 $GLOBALS['wpnb_test']  = array(
-	'options'              => array(),
-	'capabilities'         => array( 'read' => true, 'manage_options' => true ),
-	'user_id'              => 1,
-	'registered_settings'  => array(),
-	'registered_categories'=> array(),
-	'registered_abilities' => array(),
-	'actions'              => array(),
-	'options_pages'        => array(),
-	'settings_fields'      => array(),
+	'options'               => array(),
+	'capabilities'          => array( 'read' => true, 'manage_options' => true ),
+	'user_id'               => 1,
+	'registered_settings'   => array(),
+	'registered_categories' => array(),
+	'registered_abilities'  => array(),
+	'abilities'             => array(),
+	'actions'               => array(),
+	'options_pages'         => array(),
+	'settings_fields'       => array(),
+	'plugins'               => array(),
+	'post_types'            => array(),
+	'post_type_supports'    => array(),
+	'taxonomies'            => array(),
+	'theme'                 => array(
+		'Name'       => 'Test Theme',
+		'Version'    => '1.0.0',
+		'stylesheet' => 'test-theme',
+		'template'   => 'test-theme',
+		'block'      => false,
+	),
 );
 
 function wpnb_test_reset_state() {
@@ -23,9 +35,72 @@ function wpnb_test_reset_state() {
 	$GLOBALS['wpnb_test']['registered_settings']   = array();
 	$GLOBALS['wpnb_test']['registered_categories'] = array();
 	$GLOBALS['wpnb_test']['registered_abilities']  = array();
+	$GLOBALS['wpnb_test']['abilities']             = array();
 	$GLOBALS['wpnb_test']['actions']               = array();
 	$GLOBALS['wpnb_test']['options_pages']         = array();
 	$GLOBALS['wpnb_test']['settings_fields']       = array();
+	$GLOBALS['wpnb_test']['plugins']               = array();
+	$GLOBALS['wpnb_test']['post_types']            = array();
+	$GLOBALS['wpnb_test']['post_type_supports']    = array();
+	$GLOBALS['wpnb_test']['taxonomies']            = array();
+	$GLOBALS['wpnb_test']['theme']                 = array(
+		'Name'       => 'Test Theme',
+		'Version'    => '1.0.0',
+		'stylesheet' => 'test-theme',
+		'template'   => 'test-theme',
+		'block'      => false,
+	);
+}
+
+/**
+ * Minimal Ability object for dependency-free tests.
+ */
+final class WP_Native_Builder_Test_Ability {
+	private $name;
+	private $label;
+	private $description;
+	private $category;
+	private $input_schema;
+	private $meta;
+
+	public function __construct( $name, $label = '', $description = '', $category = 'test', $input_schema = array(), $meta = array() ) {
+		$this->name         = (string) $name;
+		$this->label        = (string) $label;
+		$this->description  = (string) $description;
+		$this->category     = (string) $category;
+		$this->input_schema = is_array( $input_schema ) ? $input_schema : array();
+		$this->meta         = is_array( $meta ) ? $meta : array();
+	}
+
+	public function get_name() { return $this->name; }
+	public function get_label() { return $this->label; }
+	public function get_description() { return $this->description; }
+	public function get_category() { return $this->category; }
+	public function get_input_schema() { return $this->input_schema; }
+	public function get_meta() { return $this->meta; }
+}
+
+/**
+ * Minimal theme object for dependency-free tests.
+ */
+final class WP_Native_Builder_Test_Theme {
+	private $data;
+
+	public function __construct( array $data ) {
+		$this->data = $data;
+	}
+
+	public function get( $field ) {
+		return isset( $this->data[ $field ] ) ? $this->data[ $field ] : '';
+	}
+
+	public function get_stylesheet() {
+		return isset( $this->data['stylesheet'] ) ? $this->data['stylesheet'] : '';
+	}
+
+	public function get_template() {
+		return isset( $this->data['template'] ) ? $this->data['template'] : '';
+	}
 }
 
 function __( $text, $domain = null ) { return $text; }
@@ -34,6 +109,9 @@ function esc_html( $text ) { return htmlspecialchars( (string) $text, ENT_QUOTES
 function esc_attr( $text ) { return htmlspecialchars( (string) $text, ENT_QUOTES, 'UTF-8' ); }
 function esc_url( $url ) { return (string) $url; }
 function get_bloginfo( $show = '' ) { return '7.1'; }
+function get_locale() { return 'en_US'; }
+function is_rtl() { return false; }
+function wp_timezone_string() { return 'UTC'; }
 function rest_url( $path = '' ) { return 'https://example.test/wp-json/' . ltrim( $path, '/' ); }
 function current_user_can( $capability ) { return ! empty( $GLOBALS['wpnb_test']['capabilities'][ $capability ] ); }
 function get_current_user_id() { return (int) $GLOBALS['wpnb_test']['user_id']; }
@@ -51,6 +129,14 @@ function submit_button() { echo '<button type="submit">Save Changes</button>'; }
 function wp_die( $message ) { throw new RuntimeException( (string) $message ); }
 function wp_register_ability_category( $slug, $args ) { $GLOBALS['wpnb_test']['registered_categories'][ $slug ] = $args; return (object) array( 'slug' => $slug ); }
 function wp_register_ability( $name, $args ) { $GLOBALS['wpnb_test']['registered_abilities'][ $name ] = $args; return (object) array( 'name' => $name ); }
+function wp_get_ability( $name ) { return isset( $GLOBALS['wpnb_test']['abilities'][ $name ] ) ? $GLOBALS['wpnb_test']['abilities'][ $name ] : null; }
+function wp_get_abilities( $args = array() ) { return array_values( $GLOBALS['wpnb_test']['abilities'] ); }
+function wp_get_theme() { return new WP_Native_Builder_Test_Theme( $GLOBALS['wpnb_test']['theme'] ); }
+function wp_is_block_theme() { return ! empty( $GLOBALS['wpnb_test']['theme']['block'] ); }
+function get_plugins() { return $GLOBALS['wpnb_test']['plugins']; }
+function get_post_types( $args = array(), $output = 'names' ) { return 'objects' === $output ? $GLOBALS['wpnb_test']['post_types'] : array_keys( $GLOBALS['wpnb_test']['post_types'] ); }
+function post_type_supports( $post_type, $feature ) { return ! empty( $GLOBALS['wpnb_test']['post_type_supports'][ $post_type ][ $feature ] ); }
+function get_taxonomies( $args = array(), $output = 'names' ) { return 'objects' === $output ? $GLOBALS['wpnb_test']['taxonomies'] : array_keys( $GLOBALS['wpnb_test']['taxonomies'] ); }
 
 spl_autoload_register(
 	static function ( $class ) {
@@ -60,7 +146,7 @@ spl_autoload_register(
 		}
 		$relative   = substr( $class, strlen( $prefix ) );
 		$parts      = explode( '\\', $relative );
-		$class_file = 'class-' . strtolower( str_replace( '_', '-', array_pop( $parts ) ) ) . '.php';
+		$class_file = 'class-' . strtolower( str_replace( '_', '-', array_pop( $parts ) ) . '.php' );
 		$directory  = $parts ? implode( '/', $parts ) . '/' : '';
 		$path       = dirname( __DIR__ ) . '/src/' . $directory . $class_file;
 		if ( is_readable( $path ) ) {
