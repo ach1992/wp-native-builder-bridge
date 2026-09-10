@@ -1,6 +1,8 @@
 <?php
 require __DIR__ . '/bootstrap.php';
 
+use WP_Native_Builder_Bridge\Abilities\Ability_Resolver;
+use WP_Native_Builder_Bridge\Abilities\Content_Eligibility;
 use WP_Native_Builder_Bridge\Abilities\Registrar;
 use WP_Native_Builder_Bridge\Admin\Settings_Page;
 use WP_Native_Builder_Bridge\Support\Environment;
@@ -18,6 +20,20 @@ function wpnb_assert( $condition, $message ) {
 		++$failures;
 		fwrite( STDERR, "FAIL: {$message}\n" );
 	}
+}
+
+function wpnb_test_ability( $name, array $properties = array(), array $meta = array(), $category = 'test' ) {
+	return new WP_Native_Builder_Test_Ability(
+		$name,
+		$name,
+		'Test ability ' . $name,
+		$category,
+		array(
+			'type'       => 'object',
+			'properties' => $properties,
+		),
+		$meta
+	);
 }
 
 $environment = new Environment();
@@ -72,6 +88,7 @@ $registrar->register_category();
 $registrar->register_abilities();
 wpnb_assert( isset( $GLOBALS['wpnb_test']['registered_categories'][ Registrar::CATEGORY ] ), 'Bridge ability category is registered.' );
 wpnb_assert( isset( $GLOBALS['wpnb_test']['registered_abilities']['wp-native-builder/bridge-info'] ), 'Bridge discovery ability is registered.' );
+wpnb_assert( isset( $GLOBALS['wpnb_test']['registered_abilities']['wp-native-builder/site-context'] ), 'Site context ability is registered.' );
 $ability = $GLOBALS['wpnb_test']['registered_abilities']['wp-native-builder/bridge-info'];
 wpnb_assert( true === $ability['meta']['mcp']['public'], 'Bridge discovery ability explicitly opts into MCP exposure.' );
 wpnb_assert( true === $ability['meta']['annotations']['readonly'], 'Bridge discovery ability is marked read-only.' );
@@ -79,6 +96,173 @@ wpnb_assert( true === call_user_func( $ability['permission_callback'] ), 'Bridge
 $bridge_info = call_user_func( $ability['execute_callback'] );
 wpnb_assert( '0.1.0-dev' === $bridge_info['plugin_version'], 'Bridge discovery ability returns plugin version.' );
 wpnb_assert( true === $bridge_info['mcp_adapter']['available'], 'Bridge discovery ability reports adapter availability.' );
+
+wpnb_test_reset_state();
+$GLOBALS['wpnb_test']['abilities'] = array(
+	'vendor/private' => wpnb_test_ability(
+		'vendor/private',
+		array( 'post_type' => array( 'type' => 'string' ) ),
+		array( 'public' => false )
+	),
+	'vendor/mcp-optout' => wpnb_test_ability(
+		'vendor/mcp-optout',
+		array( 'post_type' => array( 'type' => 'string' ) ),
+		array( 'public' => true, 'mcp' => array( 'public' => false ) )
+	),
+	'vendor/compatible' => wpnb_test_ability(
+		'vendor/compatible',
+		array(
+			'post_type' => array( 'type' => 'string' ),
+			'fields'    => array( 'type' => 'array' ),
+		),
+		array( 'public' => true ),
+		'content'
+	),
+	'wp-native-builder/internal' => wpnb_test_ability( 'wp-native-builder/internal', array(), array( 'public' => true ) ),
+	'mcp-adapter/meta' => wpnb_test_ability( 'mcp-adapter/meta', array(), array( 'public' => true ) ),
+);
+$resolver = new Ability_Resolver();
+$resolved = $resolver->find(
+	array( 'vendor/private', 'vendor/mcp-optout', 'vendor/compatible' ),
+	array( 'post_type', 'fields' )
+);
+wpnb_assert( $resolved instanceof WP_Native_Builder_Test_Ability, 'Resolver finds a compatible external Ability.' );
+wpnb_assert( 'vendor/compatible' === $resolved->get_name(), 'Resolver skips private and MCP-opted-out candidates.' );
+wpnb_assert( null === $resolver->find( array( 'vendor/compatible' ), array( 'missing_input' ) ), 'Resolver rejects an incompatible input contract.' );
+wpnb_assert( false === $resolver->is_mcp_exposed( $GLOBALS['wpnb_test']['abilities']['vendor/mcp-optout'] ), 'Explicit MCP opt-out overrides general public exposure.' );
+
+$catalog       = $resolver->public_catalog( 50 );
+$catalog_names = array_map(
+	static function ( $item ) {
+		return $item['name'];
+	},
+	$catalog
+);
+wpnb_assert( in_array( 'vendor/compatible', $catalog_names, true ), 'Catalog surfaces an already-installed third-party public Ability.' );
+wpnb_assert( ! in_array( 'wp-native-builder/internal', $catalog_names, true ), 'Catalog does not mirror Bridge-owned Abilities.' );
+wpnb_assert( ! in_array( 'mcp-adapter/meta', $catalog_names, true ), 'Catalog omits MCP Adapter meta abilities.' );
+
+wpnb_test_reset_state();
+$GLOBALS['wpnb_test']['options'] = array(
+	Settings::OPTION_NAME   => $settings->defaults(),
+	'permalink_structure'   => '/%postname%/',
+	'show_on_front'         => 'page',
+	'page_on_front'         => 42,
+	'page_for_posts'        => 43,
+	'active_plugins'        => array( 'acme/acme.php' ),
+);
+$GLOBALS['wpnb_test']['capabilities'] = array(
+	'read'              => true,
+	'edit_posts'        => true,
+	'publish_posts'     => true,
+	'upload_files'      => true,
+	'manage_categories' => true,
+);
+$GLOBALS['wpnb_test']['plugins'] = array(
+	'acme/acme.php' => array( 'Name' => 'Acme Content', 'Version' => '2.3.4' ),
+);
+$GLOBALS['wpnb_test']['theme'] = array(
+	'Name'       => 'Twenty Twenty-Six',
+	'Version'    => '1.0',
+	'stylesheet' => 'twentytwentysix',
+	'template'   => 'twentytwentysix',
+	'block'      => true,
+);
+$GLOBALS['wpnb_test']['post_types'] = array(
+	'book' => (object) array(
+		'name'         => 'book',
+		'label'        => 'Books',
+		'hierarchical' => false,
+		'show_in_rest' => true,
+		'rest_base'    => 'books',
+	),
+);
+$GLOBALS['wpnb_test']['post_type_supports'] = array(
+	'book' => array( 'editor' => true, 'thumbnail' => true ),
+);
+$admin_record = (object) array(
+	'name'               => 'admin_record',
+	'cap'                => (object) array( 'edit_posts' => 'edit_posts' ),
+	'public'             => false,
+	'publicly_queryable' => false,
+	'show_ui'            => true,
+	'show_in_rest'       => false,
+);
+$content_record = (object) array(
+	'name'               => 'content_record',
+	'cap'                => (object) array( 'edit_posts' => 'edit_posts' ),
+	'public'             => true,
+	'publicly_queryable' => true,
+	'show_ui'            => true,
+	'show_in_rest'       => true,
+);
+$GLOBALS['wpnb_test']['post_types']['admin_record']   = $admin_record;
+$GLOBALS['wpnb_test']['post_types']['content_record'] = $content_record;
+$GLOBALS['wpnb_test']['post_type_supports']['content_record'] = array( 'editor' => true );
+wpnb_assert( null === Content_Eligibility::post_type_object( 'admin_record' ), 'show_ui alone does not make an administrative CPT generic Builder content.' );
+wpnb_assert( $content_record === Content_Eligibility::post_type_object( 'content_record' ), 'A content-facing CPT remains eligible for generic Builder content.' );
+wpnb_assert( false === Content_Eligibility::supports_blocks( 'admin_record' ), 'Administrative non-editor CPTs are rejected as Gutenberg targets.' );
+wpnb_assert( true === Content_Eligibility::supports_blocks( 'content_record' ), 'Content-facing editor CPTs remain valid Gutenberg targets.' );
+
+$GLOBALS['wpnb_test']['taxonomies'] = array(
+	'genre' => (object) array(
+		'name'         => 'genre',
+		'label'        => 'Genres',
+		'hierarchical' => true,
+		'show_in_rest' => true,
+		'rest_base'    => 'genres',
+		'object_type'  => array( 'book' ),
+	),
+);
+$GLOBALS['wpnb_test']['abilities'] = array(
+	'core/get-site-info' => wpnb_test_ability( 'core/get-site-info', array( 'fields' => array( 'type' => 'array' ) ), array( 'public' => true ), 'site' ),
+	'core/get-user-info' => wpnb_test_ability( 'core/get-user-info', array( 'fields' => array( 'type' => 'array' ) ), array( 'public' => true ), 'user' ),
+	'core/get-environment-info' => wpnb_test_ability( 'core/get-environment-info', array( 'fields' => array( 'type' => 'array' ) ), array( 'public' => true ), 'site' ),
+	'acme/site-builder-info' => wpnb_test_ability( 'acme/site-builder-info', array(), array( 'public' => true ), 'acme' ),
+);
+$permissions = new Permissions( $settings );
+$registrar   = new Registrar( $environment, $settings, $permissions );
+$registrar->register_abilities();
+wpnb_assert( isset( $GLOBALS['wpnb_test']['registered_abilities']['wp-native-builder/content-read'] ), 'Bridge content-read fallback remains registered unless a provider contract is deliberately verified.' );
+wpnb_assert( isset( $GLOBALS['wpnb_test']['registered_abilities']['wp-native-builder/content-upsert'] ), 'Bridge content mutation fallback remains available for uncovered operations.' );
+wpnb_assert( isset( $GLOBALS['wpnb_test']['registered_abilities']['wp-native-builder/blocks-read'] ), 'Generic Gutenberg block inspection ability is registered.' );
+wpnb_assert( isset( $GLOBALS['wpnb_test']['registered_abilities']['wp-native-builder/blocks-mutate'] ), 'Generic Gutenberg block mutation ability is registered.' );
+wpnb_assert( isset( $GLOBALS['wpnb_test']['registered_abilities']['wp-native-builder/media-read'] ), 'Generic Media Library inspection ability is registered.' );
+wpnb_assert( isset( $GLOBALS['wpnb_test']['registered_abilities']['wp-native-builder/media-upload'] ), 'Bounded WordPress media upload ability is registered.' );
+wpnb_assert( isset( $GLOBALS['wpnb_test']['registered_abilities']['wp-native-builder/media-update'] ), 'Media metadata update ability is registered.' );
+wpnb_assert( isset( $GLOBALS['wpnb_test']['registered_abilities']['wp-native-builder/media-delete'] ), 'Gated media deletion ability is registered.' );
+wpnb_assert( isset( $GLOBALS['wpnb_test']['registered_abilities']['wp-native-builder/terms-read'] ), 'Generic taxonomy inspection ability is registered.' );
+wpnb_assert( isset( $GLOBALS['wpnb_test']['registered_abilities']['wp-native-builder/term-upsert'] ), 'Generic taxonomy term mutation ability is registered.' );
+wpnb_assert( isset( $GLOBALS['wpnb_test']['registered_abilities']['wp-native-builder/terms-assign'] ), 'Generic taxonomy assignment ability is registered.' );
+wpnb_assert( isset( $GLOBALS['wpnb_test']['registered_abilities']['wp-native-builder/term-delete'] ), 'Gated taxonomy term deletion ability is registered.' );
+wpnb_assert( isset( $GLOBALS['wpnb_test']['registered_abilities']['wp-native-builder/navigation-read'] ), 'Theme-neutral navigation inspection ability is registered.' );
+wpnb_assert( isset( $GLOBALS['wpnb_test']['registered_abilities']['wp-native-builder/classic-navigation-mutate'] ), 'Classic navigation mutation ability is registered.' );
+wpnb_assert( true === $GLOBALS['wpnb_test']['registered_abilities']['wp-native-builder/classic-navigation-mutate']['meta']['annotations']['destructive'], 'Mixed classic-navigation mutation is conservatively marked destructive because remove_item is permanent.' );
+$site_ability = $GLOBALS['wpnb_test']['registered_abilities']['wp-native-builder/site-context'];
+wpnb_assert( true === call_user_func( $site_ability['permission_callback'] ), 'Site context honors Site Read plus WordPress read capability.' );
+$site_context = call_user_func( $site_ability['execute_callback'] );
+wpnb_assert( 'core/get-site-info' === $site_context['reuse']['site_info'], 'Site context advertises compatible Core site-info reuse.' );
+wpnb_assert( 'core/get-user-info' === $site_context['reuse']['user_info'], 'Site context advertises compatible Core user-info reuse.' );
+wpnb_assert( 'core/get-environment-info' === $site_context['reuse']['environment_info'], 'Site context advertises compatible Core environment-info reuse.' );
+wpnb_assert( 'Twenty Twenty-Six' === $site_context['theme']['name'], 'Site context is theme-neutral and reports a non-Astra block theme.' );
+wpnb_assert( true === $site_context['theme']['is_block_theme'], 'Site context reports block-theme capability.' );
+wpnb_assert( 'book' === $site_context['post_types'][0]['name'], 'Generic site inspection discovers a plugin-provided editable post type.' );
+wpnb_assert( true === $site_context['post_types'][0]['supports_editor'], 'Generic post-type discovery reports editor support.' );
+wpnb_assert( 'genre' === $site_context['taxonomies'][0]['name'], 'Generic site inspection discovers a plugin-provided taxonomy.' );
+wpnb_assert( 'acme/acme.php' === $site_context['plugins'][0]['file'], 'Site context reports the installed provider plugin.' );
+wpnb_assert( true === $site_context['plugins'][0]['active'], 'Site context reports provider activation state.' );
+$site_catalog_names = array_map(
+	static function ( $item ) {
+		return $item['name'];
+	},
+	$site_context['external_abilities']
+);
+wpnb_assert( in_array( 'acme/site-builder-info', $site_catalog_names, true ), 'Site context exposes a third-party Ability hint without a hardcoded Acme integration.' );
+
+wpnb_assert( ! array_key_exists( 'content_read', $site_context['reuse'] ), 'Site context does not advertise speculative content Ability identifiers.' );
+
+$GLOBALS['wpnb_test']['options'][ Settings::OPTION_NAME ][ Settings::GROUP_SITE_READ ] = 0;
+wpnb_assert( false === call_user_func( $site_ability['permission_callback'] ), 'Disabled Site Read group denies site-context.' );
 
 wpnb_test_reset_state();
 $log = new Mutation_Log();
