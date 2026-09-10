@@ -9,6 +9,7 @@ export WORDPRESS_TAG="$wordpress_tag"
 export COMPOSE_PROJECT_NAME="wpnb-integration-${safe_tag}-$$"
 
 compose=(docker compose -f "$compose_file")
+bash "$root/bin/build-zip.sh"
 cleanup() {
     "${compose[@]}" down -v --remove-orphans >/dev/null 2>&1 || true
 }
@@ -27,15 +28,7 @@ for attempt in $(seq 1 30); do
     sleep 2
 done
 
-"${compose[@]}" exec -T wordpress mkdir -p /var/www/html/wp-content/plugins/wp-native-builder-bridge
-tar \
-    --mode='u+rwX,go+rX' \
-    --exclude='./.git' \
-    --exclude='./vendor' \
-    --exclude='./build' \
-    --exclude='./node_modules' \
-    -C "$root" -cf - . \
-    | "${compose[@]}" exec -T wordpress tar -xf - -C /var/www/html/wp-content/plugins/wp-native-builder-bridge
+"${compose[@]}" cp "$root/build/wp-native-builder-bridge.zip" wordpress:/var/www/html/wp-native-builder-bridge.zip
 
 wp=("${compose[@]}" run --rm cli)
 "${wp[@]}" core install \
@@ -48,7 +41,13 @@ wp=("${compose[@]}" run --rm cli)
     --allow-root
 mcp_adapter_url="${MCP_ADAPTER_URL:-https://github.com/WordPress/mcp-adapter/releases/download/v0.6.1/mcp-adapter.zip}"
 "${wp[@]}" plugin install "$mcp_adapter_url" --activate --allow-root
-"${wp[@]}" plugin activate wp-native-builder-bridge --allow-root
+"${wp[@]}" plugin install /var/www/html/wp-native-builder-bridge.zip --activate --allow-root
+"${compose[@]}" exec -T wordpress rm -f /var/www/html/wp-native-builder-bridge.zip
+
+# Integration-only tests/fixtures are copied beside the installed release package after activation.
+# They are deliberately absent from the distributable ZIP itself.
+tar --mode='u+rwX,go+rX' -C "$root" -cf - tests \
+    | "${compose[@]}" exec -T wordpress tar -xf - -C /var/www/html/wp-content/plugins/wp-native-builder-bridge
 
 actual_wp="$("${wp[@]}" core version --allow-root | tail -n 1)"
 actual_php="$("${wp[@]}" eval 'echo PHP_VERSION;' --allow-root | tail -n 1)"
@@ -60,7 +59,8 @@ for test in \
     issue3-safety-regressions.php \
     issue3-provider-smoke.php \
     issue4-core-admin-smoke.php \
-    issue5-hardening-smoke.php
+    issue5-hardening-smoke.php \
+    issue6-http-transport-smoke.php
 do
     echo "== ${test} =="
     "${wp[@]}" eval-file "wp-content/plugins/wp-native-builder-bridge/tests/integration/${test}" --user=1 --allow-root
@@ -68,6 +68,8 @@ done
 
 "${wp[@]}" eval-file wp-content/plugins/wp-native-builder-bridge/tests/integration/issue4-code-snippets-smoke.php --user=1 --allow-root
 "${wp[@]}" eval-file wp-content/plugins/wp-native-builder-bridge/tests/integration/issue4-astra-reuse-smoke.php --user=1 --allow-root
+
+bash "$root/bin/run-mcp-stdio-smoke.sh"
 
 if [[ "${RUN_OPTIONAL_PROVIDERS:-0}" == "1" ]]; then
     echo "== Code Snippets 3.10.2 provider integration =="
@@ -78,6 +80,30 @@ if [[ "${RUN_OPTIONAL_PROVIDERS:-0}" == "1" ]]; then
     "${wp[@]}" theme install astra --version=4.13.11 --activate --allow-root
     "${wp[@]}" eval 'Astra_API_Init::update_admin_settings_option("enable_abilities", true);' --allow-root
     "${wp[@]}" eval-file wp-content/plugins/wp-native-builder-bridge/tests/integration/issue4-astra-reuse-smoke.php --user=1 --allow-root
+
+    echo "== GFAPI transport contract fixture =="
+    "${compose[@]}" exec -T wordpress mkdir -p /var/www/html/wp-content/mu-plugins
+    "${compose[@]}" exec -T wordpress cp /var/www/html/wp-content/plugins/wp-native-builder-bridge/tests/fixtures/gravity-forms-contract.php /var/www/html/wp-content/mu-plugins/wpnb-gravity-forms-contract.php
+    "${wp[@]}" user add-cap 1 gravityforms_view_forms gravityforms_create_form gravityforms_edit_forms gravityforms_delete_forms --allow-root
+    bash "$root/bin/run-mcp-provider-smoke.sh"
 fi
+
+echo "== release uninstall cleanup =="
+"${wp[@]}" option update wp_native_builder_bridge_settings '{"site_read":1}' --format=json --allow-root >/dev/null
+"${wp[@]}" option update wp_native_builder_bridge_recent_actions '[{"ability":"fixture"}]' --format=json --allow-root >/dev/null
+"${wp[@]}" plugin uninstall wp-native-builder-bridge --deactivate --allow-root >/dev/null
+if "${wp[@]}" option get wp_native_builder_bridge_settings --allow-root >/dev/null 2>&1; then
+    echo "ERROR: settings option survived plugin uninstall." >&2
+    exit 1
+fi
+if "${wp[@]}" option get wp_native_builder_bridge_recent_actions --allow-root >/dev/null 2>&1; then
+    echo "ERROR: mutation-log option survived plugin uninstall." >&2
+    exit 1
+fi
+if "${wp[@]}" plugin is-installed wp-native-builder-bridge --allow-root >/dev/null 2>&1; then
+    echo "ERROR: plugin files survived WP-CLI uninstall." >&2
+    exit 1
+fi
+echo "Release uninstall cleanup: PASS"
 
 echo "PASS: Docker integration suite for ${wordpress_tag}."
