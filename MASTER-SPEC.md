@@ -38,6 +38,22 @@ WordPress / Gutenberg / supported plugins
 
 The Bridge is both an ability provider and an ability-aware integration layer. It should discover suitable abilities already registered by WordPress Core or installed plugins and reuse them where their public contract, permissions, and behavior satisfy the WP Native Builder use case. It should register its own typed abilities only for capability gaps or where a thin normalization wrapper materially improves the companion Skill's reliability.
 
+The capability layer is stack-adaptive. The actual installed WordPress stack is discovered at runtime; Astra, Gravity Forms, Code Snippets Pro, WooCommerce, ACF, SEO plugins, page builders, caching plugins, other themes/forms, and other extensions are ordinary optional site dependencies rather than AI dependencies. Their supported Abilities and public APIs may contribute to the available capability surface when useful.
+
+For every logical operation, prefer the smallest safe resolution path:
+
+```text
+Needed operation
+  -> suitable stable Ability already registered by Core or an installed provider?
+       -> yes: reuse its public contract directly when possible
+       -> almost: add only a thin normalization wrapper when justified
+       -> no: supported public WordPress/provider API exists?
+            -> yes: Bridge-owned typed fallback
+            -> no: report a capability gap / limited manual path
+```
+
+Do not use fuzzy semantic guessing to invoke unknown third-party operations merely because their names/descriptions look similar. Reuse must be based on a verified stable contract. The official MCP Adapter may expose suitable external Abilities directly to the companion Skill without mirroring them into the Bridge namespace.
+
 ### Required platform baseline
 
 - WordPress 6.9+ because the Abilities API is part of WordPress core from 6.9.
@@ -45,7 +61,7 @@ The Bridge is both an ability provider and an ability-aware integration layer. I
 - `wp-native-builder-bridge` installed and active.
 - No WPVibe or paid/SaaS bridge dependency.
 - No additional MCP server, broad ability-pack plugin, or helper integration plugin is required by default.
-- Existing site plugins such as Astra/Astra Pro, Gravity Forms, and Code Snippets Pro remain optional site-stack dependencies only when the site actually uses them; they are not installed merely to enlarge the AI tool surface.
+- Existing site plugins such as Astra/Astra Pro, Gravity Forms, Code Snippets Pro, WooCommerce, ACF, SEO plugins, page builders, caching plugins, and other themes/extensions remain optional site-stack dependencies only when the site actually uses them; they are not installed merely to enlarge the AI tool surface.
 - Primary development/test environment should include current WordPress and PHP 8.4; minimum PHP support must follow the tested compatible intersection of the target WordPress version and MCP Adapter rather than an invented version promise.
 
 Do not bundle a private copy of MCP Adapter. Detect it at runtime and show a concise admin notice/setup instruction when it is unavailable. If a future compatible MCP transport/adapter is demonstrably a better supported fit, the transport boundary may be adapted without changing the Bridge's WordPress ability architecture. Do not run multiple overlapping MCP server/transport plugins by default merely to gain more tools.
@@ -63,7 +79,9 @@ Do not bundle a private copy of MCP Adapter. Detect it at runtime and show a con
 9. **Reuse existing abilities first** — when WordPress Core or an already-installed plugin exposes a compatible, stable Ability, prefer discovery/reuse over implementing a duplicate Bridge tool.
 10. **Fill gaps, do not mirror everything** — Bridge-owned abilities should provide missing capabilities, required normalization, or safer WP Native Builder-specific behavior rather than blindly duplicating the whole registry.
 11. **No helper-plugin dependency sprawl** — the baseline installation remains MCP Adapter plus this Bridge; do not require extra MCP/ability plugins just to avoid implementing a bounded missing operation.
-12. **Fast delivery** — avoid architecture that does not materially improve the first useful release.
+12. **Stack-adaptive generic coverage** — standard post types, taxonomies, blocks, media, navigation, themes, and other WordPress registrations should work generically wherever public WordPress contracts make that safe.
+13. **Upstream convergence** — provider-specific Bridge code should become reducible/retirable when the upstream provider later publishes a suitable stable Ability.
+14. **Fast delivery** — avoid architecture that does not materially improve the first useful release.
 
 ## 4. Security boundary
 
@@ -159,6 +177,19 @@ Before implementing/registering a Bridge-owned ability for a logical operation:
 
 Ability discovery is a reuse optimization and future-compatibility mechanism, not a reason to make every external Ability part of the Bridge's permanent public contract.
 
+### Stack-adaptive capability resolution
+
+The Bridge must not assume its own namespace is the only capability source. Runtime discovery should make the actual installed stack visible enough for the companion Skill and Bridge-owned fallbacks to make safe choices.
+
+Two reuse modes are valid:
+
+1. **Direct external Ability reuse** — when the MCP Adapter already exposes a suitable provider Ability, the companion Skill may invoke that Ability directly. The Bridge should not duplicate or proxy it merely for namespace consistency.
+2. **Thin Bridge normalization/delegation** — only when a stable external Ability is almost sufficient and a bounded wrapper materially improves contract stability or WP Native Builder interoperability.
+
+Unknown external Abilities must not be auto-invoked based on fuzzy labels/descriptions. A provider contract must be deliberately verified before the Bridge treats it as a drop-in implementation of a logical operation. Generic discovery/catalog information may still surface such Abilities so the companion Skill can inspect their schemas and choose them when appropriate.
+
+Provider-specific Bridge fallbacks should be isolated enough that they can be reduced or removed when an upstream release introduces a suitable stable Ability, without redesigning the generic WordPress capability layer.
+
 ## 7. Required ability surface
 
 The first usable release should cover the following functional surface. A requirement may be satisfied by a suitable existing registered Ability or by a Bridge-owned implementation. The goal is reliable capability coverage, not duplicate tools. Implementation may combine closely related operations when one typed operation with an explicit `action` field is clearer and safer than many tiny tools.
@@ -193,6 +224,8 @@ Support WordPress posts, pages, and registered editable custom post types throug
 
 Preserve unrelated fields when performing targeted updates.
 
+Generic custom-post-type support is intentionally ecosystem-wide where the registered type and capabilities make ordinary WordPress editing safe; it must not be artificially restricted to provider names known to the Bridge.
+
 ### 7.3 Gutenberg blocks
 
 Provide AI-friendly block operations:
@@ -206,6 +239,8 @@ Provide AI-friendly block operations:
 For overwrite-sensitive updates, require current object identity such as `modified_gmt` plus a targeted content/block fingerprint when practical. If the expected identity no longer matches, return a conflict instead of silently overwriting newer content.
 
 Create a WordPress revision through normal content update behavior before replacing existing published content whenever WordPress revisions apply.
+
+Generic block operations should remain compatible with normal blocks registered by installed plugins where WordPress block parsing/serialization contracts are sufficient; dedicated provider code is not required merely because the block came from a third party.
 
 ### 7.4 Media
 
@@ -228,6 +263,8 @@ Support registered editable taxonomies:
 - assign/unassign terms to content;
 - delete terms only when destructive access is enabled.
 
+Generic taxonomy support should apply to plugin-provided taxonomies when their public registration/capability model makes the operation safe.
+
 ### 7.6 Navigation
 
 Support the navigation mechanism available on the site without forcing one WordPress-era representation:
@@ -241,6 +278,8 @@ Use suitable existing Abilities when present; otherwise use public WordPress API
 
 ### 7.7 Astra / Astra Pro
 
+Astra/Astra Pro is a prioritized first integration for the owner's common stack, not the only supported theme architecture. Prefer standard WordPress/block-theme/Site Editor capabilities where they are sufficient for any theme, and reuse suitable registered theme Abilities regardless of vendor.
+
 When Astra/Astra Pro is active, first check whether the installed version exposes suitable registered Abilities or another documented public interface. Prefer native registered Abilities when their contract is stable and sufficient; otherwise expose only operations that can be implemented through supported/public WordPress/Astra interfaces rather than undocumented database internals.
 
 Target capabilities:
@@ -252,9 +291,11 @@ Target capabilities:
 
 If a specific Astra feature lacks a stable public Ability/API, report it as unsupported instead of silently binding the bridge to fragile private internals. A generic WordPress custom-post-type operation may be used only when the underlying registered type and capabilities make that safe and supportable.
 
+For another theme, use standard WordPress APIs, block-theme/Site Editor mechanisms, suitable registered Abilities, or documented public theme interfaces. If no stable surface exists for a provider-specific feature, report the limitation rather than coupling to private storage.
+
 ### 7.8 Gravity Forms
 
-When Gravity Forms is active, first prefer suitable registered Abilities if the installed version provides them. Otherwise, when its public API is available, support through `GFAPI` or another documented public interface:
+Gravity Forms is a prioritized first form integration, not a boundary around other form plugins. When Gravity Forms is active, first prefer suitable registered Abilities if the installed version provides them. Otherwise, when its public API is available, support through `GFAPI` or another documented public interface:
 
 - list/get forms;
 - create/update forms;
@@ -263,11 +304,11 @@ When Gravity Forms is active, first prefer suitable registered Abilities if the 
 - inspect entries only when an explicit future use case requires it and the applicable access group/capability is enabled;
 - delete forms only under destructive access.
 
-Do not reimplement form storage directly in the database.
+Do not reimplement form storage directly in the database. Apply the same Ability -> supported API -> graceful limitation policy to other form providers when an in-scope workflow requires them.
 
 ### 7.9 Code Snippets Pro
 
-When Code Snippets Pro is active, first prefer suitable registered Abilities if the installed version provides a stable public contract. Otherwise integrate only through its current documented public API/REST/WP-CLI/programmatic interfaces that are suitable for third-party use.
+Code Snippets Pro is a prioritized first managed-code integration, not a general code-execution channel. When Code Snippets Pro is active, first prefer suitable registered Abilities if the installed version provides a stable public contract. Otherwise integrate only through its current documented public API/REST/WP-CLI/programmatic interfaces that are suitable for third-party use.
 
 Target capabilities when support is verified:
 
@@ -317,6 +358,23 @@ When `Users & Destructive` is enabled and WordPress capabilities allow it, suppo
 - perform bounded role/capability changes using WordPress APIs.
 
 Never return password hashes, application passwords, session tokens, or other credential material.
+
+### 7.13 Stack-adaptive third-party ecosystem
+
+Astra, Gravity Forms, and Code Snippets Pro are important first integration targets, but they do not define the supported WordPress universe. Generic WordPress capabilities should cover as much of the ecosystem as safely possible without provider-specific code.
+
+When an already-installed plugin/theme provides a suitable stable Ability, reuse it under its own registered security contract. When no suitable Ability exists but a documented supported public API can satisfy an in-scope WP Native Builder operation, a bounded typed Bridge fallback may be added. If neither exists, expose a clear capability limitation rather than binding to undocumented internals.
+
+WooCommerce is an important representative optional provider. It is not a required dependency. When installed:
+
+- inspect for suitable current registered Abilities first;
+- use generic custom-post-type, taxonomy, media, block, and WordPress APIs where those contracts genuinely apply;
+- use current supported/public WooCommerce APIs for bounded typed site-building fallbacks when a required operation cannot be covered generically or by an existing Ability;
+- possible site-building coverage may include product/catalog inspection, product/category content and media, store structure, WooCommerce block/site-building information, and bounded store configuration relevant to design/build work.
+
+Refunds, destructive order operations, payment-sensitive actions, customer-sensitive mutations, and similar commerce operations are not ordinary builder operations and do not enter scope implicitly. Any future addition requires separate explicit scope plus appropriate permission/approval treatment.
+
+The same resolution order applies to ACF, SEO plugins, page builders, caching plugins, other form plugins, themes, and other extensions when a real WP Native Builder workflow needs provider-specific behavior. This rule does not create a v0.1 commitment to build bespoke integrations for every plugin.
 
 ## 8. Live publishing and approval semantics
 
@@ -385,11 +443,16 @@ The plugin/setup documentation must also account for caching/security headers on
 
 ## 12. Compatibility and extension rules
 
-- Core WordPress functionality must not require Astra, Gravity Forms, Code Snippets Pro, or any helper MCP/ability-pack plugin.
+- Core WordPress functionality must not require Astra, Gravity Forms, Code Snippets Pro, WooCommerce, or any helper MCP/ability-pack plugin.
 - The default connection stack is the official MCP Adapter plus WP Native Builder Bridge.
+- Discover the actual installed site stack dynamically; installed plugins/themes may contribute suitable Abilities or supported public APIs without becoming Bridge runtime requirements.
 - Optional site integrations activate only when their dependency is already available and a supported Ability/API exists.
 - Before implementing an integration operation, check for a suitable registered Ability exposed by the installed dependency and reuse it when appropriate.
+- Generic WordPress content/CPT/taxonomy/media/block/navigation behavior should remain provider-neutral wherever public WordPress contracts are sufficient.
+- Prioritized integrations are first targets, not hard support boundaries.
+- Provider-specific Bridge fallbacks should be replaceable/reducible when upstream plugins later expose suitable stable Abilities.
 - If an optional integration is unavailable, return clear capability/discovery information instead of fatal errors.
+- If neither a suitable Ability nor a supported public API exists for a provider-specific operation, report the limitation instead of using private storage.
 - Do not automatically install another MCP server or helper ability plugin solely to gain more tools.
 - Do not register a duplicate Bridge Ability when an existing stable Ability already satisfies the same contract, unless a thin wrapper is justified by normalization, security, or companion-Skill compatibility.
 - Avoid direct database coupling to third-party plugins.
@@ -435,7 +498,11 @@ The release should have automated high-signal coverage for:
 - destructive/live operations remaining unavailable when their admin groups are disabled;
 - stale-write conflict behavior;
 - no credential material in standard inspection outputs;
-- baseline functionality with no helper MCP/ability-pack plugin beyond MCP Adapter + Bridge.
+- baseline functionality with no helper MCP/ability-pack plugin beyond MCP Adapter + Bridge;
+- an already-installed third-party plugin exposing a suitable public Ability can contribute capability without dedicated hardcoded Bridge integration;
+- a provider with no suitable Ability but a supported public API can be covered by a bounded typed fallback when that operation is in scope;
+- a provider with neither a suitable Ability nor a supported API produces a graceful capability limitation rather than private-storage coupling;
+- representative non-Astra/non-default stack behavior continues to work through generic WordPress capabilities.
 
 Use WordPress-compatible testing infrastructure and CI. Prefer the official WordPress/MCP Adapter testing approach where practical, but do not require Docker or a large JavaScript toolchain at runtime in the production plugin.
 
@@ -455,6 +522,8 @@ The bridge must make these workflows possible when the relevant access group is 
 10. Reject a stale targeted page update after the page changed since the AI inspected it.
 11. When an already-installed plugin exposes a suitable registered Ability for a required operation, use that Ability instead of creating/exposing an unnecessary duplicate Bridge implementation.
 12. When that external Ability is absent, continue through the Bridge-owned fallback without requiring installation of a helper ability plugin.
+13. On a representative non-Astra/non-default site, generic content/CPT/taxonomy/media/block/navigation capabilities remain usable through standard WordPress contracts.
+14. When an installed provider has neither a suitable Ability nor a supported public API for a requested provider-specific operation, report the limitation cleanly without private-storage coupling.
 
 ## 16. Non-goals
 
@@ -469,6 +538,7 @@ The bridge must make these workflows possible when the relevant access group is 
 - Supporting undocumented private internals merely to claim a larger feature list.
 - Creating a complicated plugin UI or per-ability policy engine.
 - Mirroring every registered external Ability into the `wp-native-builder/*` namespace.
+- Building bespoke v0.1 integrations for every WordPress plugin/theme merely because it is installed.
 
 ## 17. Success criteria
 
@@ -479,7 +549,9 @@ The first complete release is successful when:
 - MCP Adapter dependency/status is detected clearly;
 - an administrator can understand and enable the desired access groups quickly;
 - the bridge exposes a broad, discoverable typed ability surface covering ordinary site building and supported administration;
-- compatible Abilities from already-installed plugins can be reused without making those providers mandatory dependencies or duplicating their functionality unnecessarily;
+- compatible Abilities from already-installed plugins/themes can be reused without making those providers mandatory dependencies or duplicating their functionality unnecessarily;
+- generic WordPress capabilities remain useful across representative non-default stacks instead of being tied to Astra or a fixed provider list;
+- provider-specific Bridge fallbacks use supported public APIs and can be reduced/retired when upstream providers later expose suitable stable Abilities;
 - the Bridge remains useful when no extra helper ability-pack plugins are installed;
 - WordPress capability checks and admin switches reliably deny disabled/unauthorized Bridge-owned actions;
 - an MCP client can inspect and modify a test WordPress site end-to-end;
