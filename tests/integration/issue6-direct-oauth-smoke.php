@@ -48,6 +48,27 @@ wpnb_issue6_oauth_assert( in_array( 'none', $authorization['token_endpoint_auth_
 wpnb_issue6_oauth_assert( in_array( 'refresh_token', $authorization['grant_types_supported'] ?? array(), true ), 'Authorization metadata does not advertise refresh_token.' );
 wpnb_issue6_oauth_assert( true === ( $authorization['authorization_response_iss_parameter_supported'] ?? false ), 'Authorization metadata does not advertise authorization-response issuer identification.' );
 
+// Omitting scope must never silently grant offline_access. The least-privilege
+// default is the minimum MCP scope, while refresh access remains opt-in.
+set_transient( OAuth_Server::CLIENT_METADATA_CACHE, 1, 60 );
+$validate_authorization = new ReflectionMethod( OAuth_Server::class, 'validate_authorization_request' );
+$default_scope_request  = $validate_authorization->invoke(
+	$oauth,
+	array(
+		'client_id'             => OAuth_Server::CHATGPT_CLIENT_ID,
+		'redirect_uri'          => OAuth_Server::CHATGPT_REDIRECT_URI,
+		'response_type'         => 'code',
+		'code_challenge'        => str_repeat( 'A', 43 ),
+		'code_challenge_method' => 'S256',
+		'resource'              => $oauth->mcp_endpoint_url(),
+		'scope'                 => '',
+		'state'                 => 'wpnb-default-scope-test',
+	)
+);
+wpnb_issue6_oauth_assert( is_array( $default_scope_request ), 'Authorization request without scope was not accepted.' );
+wpnb_issue6_oauth_assert( OAuth_Server::SCOPE_MCP === ( $default_scope_request['scope'] ?? '' ), 'Missing OAuth scope silently granted more than mcp:use.' );
+delete_transient( OAuth_Server::CLIENT_METADATA_CACHE );
+
 $routes = rest_get_server()->get_routes();
 wpnb_issue6_oauth_assert( isset( $routes[ OAuth_Server::MCP_REQUEST_ROUTE ] ), 'Bridge-owned direct MCP REST route was not registered by MCP Adapter.' );
 wpnb_issue6_oauth_assert( isset( $routes['/wp-native-builder/v1/oauth/token'] ), 'OAuth token REST route was not registered.' );
@@ -55,7 +76,36 @@ wpnb_issue6_oauth_assert( isset( $routes['/wp-native-builder/v1/oauth/revoke'] )
 
 $verifier  = str_repeat( 'A', 64 );
 $challenge = rtrim( strtr( base64_encode( hash( 'sha256', $verifier, true ) ), '+/', '-_' ), '=' );
-$scope     = OAuth_Server::SCOPE_MCP . ' ' . OAuth_Server::SCOPE_OFFLINE;
+
+$mcp_only_claims = array(
+	'user_id'        => $authenticated_user_id,
+	'client_id'      => OAuth_Server::CHATGPT_CLIENT_ID,
+	'redirect_uri'   => OAuth_Server::CHATGPT_REDIRECT_URI,
+	'code_challenge' => $challenge,
+	'resource'       => $oauth->mcp_endpoint_url(),
+	'scope'          => OAuth_Server::SCOPE_MCP,
+);
+$mcp_only_code = $store->issue( OAuth_Store::TYPE_CODE, $mcp_only_claims, OAuth_Server::CODE_TTL );
+$mcp_only_response = wpnb_issue6_oauth_token_request(
+	$oauth,
+	array(
+		'grant_type'    => 'authorization_code',
+		'code'          => $mcp_only_code,
+		'client_id'     => OAuth_Server::CHATGPT_CLIENT_ID,
+		'redirect_uri'  => OAuth_Server::CHATGPT_REDIRECT_URI,
+		'resource'      => $oauth->mcp_endpoint_url(),
+		'code_verifier' => $verifier,
+	)
+);
+wpnb_issue6_oauth_assert( 200 === $mcp_only_response->get_status(), 'MCP-only authorization code exchange failed.' );
+$mcp_only_data = wpnb_issue6_oauth_data( $mcp_only_response );
+wpnb_issue6_oauth_assert( ! isset( $mcp_only_data['refresh_token'] ), 'Refresh token was issued without offline_access.' );
+wpnb_issue6_oauth_assert( OAuth_Server::SCOPE_MCP === ( $mcp_only_data['scope'] ?? '' ), 'MCP-only token response changed the authorized scope.' );
+if ( ! empty( $mcp_only_data['access_token'] ) ) {
+	$store->revoke( (string) $mcp_only_data['access_token'] );
+}
+
+$scope = OAuth_Server::SCOPE_MCP . ' ' . OAuth_Server::SCOPE_OFFLINE;
 $claims    = array(
 	'user_id'        => $authenticated_user_id,
 	'client_id'      => OAuth_Server::CHATGPT_CLIENT_ID,
@@ -202,6 +252,7 @@ $revoke = new WP_REST_Request( 'POST', '/wp-native-builder/v1/oauth/revoke' );
 $revoke->set_param( 'token', $new_access );
 $revoke_response = $oauth->handle_revoke_request( $revoke );
 wpnb_issue6_oauth_assert( 200 === $revoke_response->get_status(), 'Access-token revocation endpoint failed.' );
+wpnb_issue6_oauth_assert( 'no-store' === ( $revoke_response->get_headers()['Cache-Control'] ?? '' ), 'Revocation response is cacheable.' );
 
 $revoked_request = new WP_REST_Request( 'POST', OAuth_Server::MCP_REQUEST_ROUTE );
 $revoked_request->set_header( 'Authorization', 'Bearer ' . $new_access );

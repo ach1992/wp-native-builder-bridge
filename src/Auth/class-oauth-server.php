@@ -308,6 +308,8 @@ final class OAuth_Server {
 		}
 
 		if (
+			empty( $claims['client_id'] ) ||
+			! hash_equals( self::CHATGPT_CLIENT_ID, (string) $claims['client_id'] ) ||
 			empty( $claims['resource'] ) ||
 			! hash_equals( $this->mcp_endpoint_url(), (string) $claims['resource'] ) ||
 			empty( $claims['scope'] ) ||
@@ -698,7 +700,9 @@ final class OAuth_Server {
 
 		if (
 			! hash_equals( (string) $claims['client_id'], $client_id ) ||
-			! hash_equals( (string) $claims['resource'], $resource )
+			! hash_equals( (string) $claims['resource'], $resource ) ||
+			empty( $claims['scope'] ) ||
+			! in_array( self::SCOPE_OFFLINE, $this->parse_scope( (string) $claims['scope'] ), true )
 		) {
 			return $this->oauth_error( 'invalid_grant', 'The refresh token binding is invalid.' );
 		}
@@ -730,19 +734,19 @@ final class OAuth_Server {
 			'scope'     => $scope,
 		);
 
-		$access_token  = $this->store->issue( OAuth_Store::TYPE_ACCESS, $token_claims, self::ACCESS_TTL );
-		$refresh_token = $this->store->issue( OAuth_Store::TYPE_REFRESH, $token_claims, self::REFRESH_TTL );
-
-		$response = new \WP_REST_Response(
-			array(
-				'access_token'  => $access_token,
-				'token_type'    => 'Bearer',
-				'expires_in'    => self::ACCESS_TTL,
-				'refresh_token' => $refresh_token,
-				'scope'         => $scope,
-			),
-			200
+		$access_token = $this->store->issue( OAuth_Store::TYPE_ACCESS, $token_claims, self::ACCESS_TTL );
+		$data         = array(
+			'access_token' => $access_token,
+			'token_type'   => 'Bearer',
+			'expires_in'   => self::ACCESS_TTL,
+			'scope'        => $scope,
 		);
+
+		if ( in_array( self::SCOPE_OFFLINE, $this->parse_scope( $scope ), true ) ) {
+			$data['refresh_token'] = $this->store->issue( OAuth_Store::TYPE_REFRESH, $token_claims, self::REFRESH_TTL );
+		}
+
+		$response = new \WP_REST_Response( $data, 200 );
 		$response->header( 'Cache-Control', 'no-store' );
 		$response->header( 'Pragma', 'no-cache' );
 		return $response;
@@ -757,7 +761,8 @@ final class OAuth_Server {
 	private function normalize_scope( $scope ) {
 		$requested = $this->parse_scope( $scope );
 		if ( empty( $requested ) ) {
-			$requested = $this->supported_scopes();
+			// Default to the minimum usable scope. Long-lived refresh access must be explicit.
+			$requested = array( self::SCOPE_MCP );
 		}
 
 		foreach ( $requested as $item ) {
@@ -958,6 +963,10 @@ final class OAuth_Server {
 		<p><strong><?php echo esc_html__( 'WordPress account:', 'wp-native-builder-bridge' ); ?></strong> <?php echo esc_html( $user->display_name ); ?></p>
 		<p><strong><?php echo esc_html__( 'Site:', 'wp-native-builder-bridge' ); ?></strong> <?php echo esc_html( get_bloginfo( 'name' ) ); ?></p>
 		<p><strong><?php echo esc_html__( 'MCP resource:', 'wp-native-builder-bridge' ); ?></strong><br><code><?php echo esc_html( $request['resource'] ); ?></code></p>
+		<p><strong><?php echo esc_html__( 'OAuth scopes:', 'wp-native-builder-bridge' ); ?></strong> <code><?php echo esc_html( $request['scope'] ); ?></code></p>
+		<?php if ( in_array( self::SCOPE_OFFLINE, $this->parse_scope( (string) $request['scope'] ), true ) ) : ?>
+			<p><?php echo esc_html__( 'The offline_access scope lets ChatGPT refresh this OAuth connection without asking you to sign in again each time. It does not enable any Bridge access group or add WordPress capabilities.', 'wp-native-builder-bridge' ); ?></p>
+		<?php endif; ?>
 		<p><?php echo esc_html__( 'Access remains limited by the enabled groups under Settings → WP Native Builder. You can deny this request without changing those settings.', 'wp-native-builder-bridge' ); ?></p>
 		<form method="post" action="<?php echo esc_url( $this->authorization_endpoint_url() ); ?>">
 			<input type="hidden" name="consent_id" value="<?php echo esc_attr( $consent_id ); ?>">

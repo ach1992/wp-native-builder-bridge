@@ -17,7 +17,8 @@ This is the release gate for Issue #6. Do not publish/tag merely because impleme
 - [ ] authorization code + PKCE exchange passes and code replay fails.
 - [ ] access-token storage regression proves the bearer secret is not persisted in plaintext.
 - [ ] access tokens are bound to user/client/resource/scope/expiry and rejected when invalid/revoked.
-- [ ] refresh-token rotation passes and old refresh-token replay fails.
+- [ ] omitted `scope` defaults to `mcp:use` only; `offline_access` is never granted implicitly.
+- [ ] refresh tokens are issued only when `offline_access` is explicitly granted; rotation passes and old refresh-token replay fails.
 - [ ] OAuth-authenticated direct MCP `initialize` passes.
 - [ ] raw STDIO MCP `tools/list -> discover -> get-info -> execute` remains working for non-ChatGPT/local clients.
 - [ ] representative raw MCP draft, Gutenberg mutation, publish gate, media, site configuration, and administration-read workflow passes.

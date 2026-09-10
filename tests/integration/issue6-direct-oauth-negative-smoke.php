@@ -55,6 +55,25 @@ wpnb_issue6_oauth_negative_assert(
 );
 $store->revoke( $wrong_resource );
 
+// Access tokens minted for another OAuth client must not cross the ChatGPT client boundary.
+$wrong_client = $store->issue(
+	OAuth_Store::TYPE_ACCESS,
+	array_merge(
+		$base_claims,
+		array(
+			'client_id' => 'https://invalid.example/oauth/client.json',
+		)
+	),
+	60
+);
+wp_set_current_user( 0 );
+wpnb_issue6_oauth_negative_assert(
+	false === $oauth->authenticate_mcp_request( wpnb_issue6_oauth_bearer_request( $wrong_client ) ),
+	'Access token bound to another OAuth client was accepted.'
+);
+wpnb_issue6_oauth_negative_assert( 0 === get_current_user_id(), 'Rejected wrong-client Bearer authentication changed the current WordPress user.' );
+$store->revoke( $wrong_client );
+
 // Expiry is checked from server-side state and an expired artifact is removed on read.
 $expired = $store->issue( OAuth_Store::TYPE_ACCESS, $base_claims, 60 );
 $parts   = explode( '.', $expired );

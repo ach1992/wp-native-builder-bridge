@@ -91,7 +91,8 @@ The Bridge advertises and enforces:
 - the stable ChatGPT production client identifier `https://chatgpt.com/oauth/client.json`;
 - the stable ChatGPT redirect URI used with authorization-response issuer identification;
 - short-lived Bearer access tokens;
-- rotating refresh tokens with `offline_access`;
+- least-privilege scope handling: an omitted `scope` defaults to `mcp:use` only;
+- rotating refresh tokens only when `offline_access` is explicitly granted;
 - token revocation;
 - HTTP `401` plus `WWW-Authenticate` protected-resource discovery for missing or invalid credentials.
 

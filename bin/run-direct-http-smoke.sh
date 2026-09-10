@@ -67,4 +67,69 @@ fi
 tr -d '\r' < "$headers_file" | grep -Fqi "WWW-Authenticate: Bearer resource_metadata=\"${protected_metadata}\""
 tr -d '\r' < "$headers_file" | grep -Fqi 'Cache-Control: no-store'
 
-echo 'PASS: direct OAuth well-known discovery and unauthenticated MCP challenge over real HTTP.'
+# RFC 9207 issuer identification must be present even on authorization errors
+# when the fixed ChatGPT client and redirect are otherwise valid.
+authorize_status="$(curl -sS \
+    -H "Host: ${host_header}" \
+    -D "$headers_file" \
+    -o "$body_file" \
+    -w '%{http_code}' \
+    --get \
+    --data-urlencode 'client_id=https://chatgpt.com/oauth/client.json' \
+    --data-urlencode 'redirect_uri=https://chatgpt.com/connector_platform_oauth_redirect' \
+    --data-urlencode 'response_type=token' \
+    --data-urlencode "resource=${resource}" \
+    --data-urlencode 'scope=mcp:use offline_access' \
+    --data-urlencode 'state=wpnb-http-state' \
+    --data-urlencode 'code_challenge=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA' \
+    --data-urlencode 'code_challenge_method=S256' \
+    "${base_url}/wp-native-builder/oauth/authorize")"
+
+if [[ "$authorize_status" != "302" ]]; then
+    echo "ERROR: valid ChatGPT callback did not receive an OAuth error redirect; HTTP ${authorize_status}." >&2
+    cat "$body_file" >&2
+    exit 1
+fi
+
+authorize_headers="$(tr -d '\r' < "$headers_file")"
+for expected_header_fragment in \
+    'Location: https://chatgpt.com/connector_platform_oauth_redirect?' \
+    'error=unsupported_response_type' \
+    'iss=https://localhost' \
+    'state=wpnb-http-state'
+do
+    if ! grep -Fqi "$expected_header_fragment" <<< "$authorize_headers"; then
+        echo "ERROR: OAuth error redirect is missing expected header fragment: $expected_header_fragment" >&2
+        printf '%s\n' "$authorize_headers" >&2
+        exit 1
+    fi
+done
+
+# An untrusted redirect URI must never become an OAuth error redirect target.
+open_redirect_status="$(curl -sS \
+    -H "Host: ${host_header}" \
+    -D "$headers_file" \
+    -o "$body_file" \
+    -w '%{http_code}' \
+    --get \
+    --data-urlencode 'client_id=https://chatgpt.com/oauth/client.json' \
+    --data-urlencode 'redirect_uri=https://attacker.invalid/callback' \
+    --data-urlencode 'response_type=token' \
+    --data-urlencode "resource=${resource}" \
+    --data-urlencode 'scope=mcp:use' \
+    --data-urlencode 'state=wpnb-open-redirect-test' \
+    --data-urlencode 'code_challenge=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA' \
+    --data-urlencode 'code_challenge_method=S256' \
+    "${base_url}/wp-native-builder/oauth/authorize")"
+
+if [[ "$open_redirect_status" != "400" ]]; then
+    echo "ERROR: untrusted OAuth redirect URI returned HTTP ${open_redirect_status}, expected 400." >&2
+    exit 1
+fi
+
+if tr -d '\r' < "$headers_file" | grep -qi '^Location:'; then
+    echo 'ERROR: untrusted OAuth redirect URI produced a Location header.' >&2
+    exit 1
+fi
+
+echo 'PASS: direct OAuth well-known discovery, MCP challenge, issuer error redirect, and open-redirect rejection over real HTTP.'
