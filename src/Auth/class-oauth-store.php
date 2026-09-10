@@ -70,6 +70,10 @@ final class OAuth_Store {
 	/**
 	 * Reads and validates an opaque artifact.
 	 *
+	 * For one-time artifacts, successful deletion is part of validation. This
+	 * makes concurrent code/refresh consumption fail closed after the first
+	 * request wins the backing WordPress cache/option deletion.
+	 *
 	 * @param string $type    Artifact type.
 	 * @param string $token   Opaque artifact.
 	 * @param bool   $consume Whether to remove a successfully validated artifact.
@@ -89,7 +93,7 @@ final class OAuth_Store {
 			return false;
 		}
 
-		if ( (int) $claims['expires_at'] < time() ) {
+		if ( (int) $claims['expires_at'] <= time() ) {
 			delete_transient( $key );
 			return false;
 		}
@@ -102,8 +106,8 @@ final class OAuth_Store {
 			return false;
 		}
 
-		if ( $consume ) {
-			delete_transient( $key );
+		if ( $consume && ! delete_transient( $key ) ) {
+			return false;
 		}
 
 		unset( $claims['secret_hash'], $claims['instance_id'] );
@@ -135,8 +139,7 @@ final class OAuth_Store {
 				return false;
 			}
 
-			delete_transient( $key );
-			return true;
+			return delete_transient( $key );
 		}
 
 		return false;
