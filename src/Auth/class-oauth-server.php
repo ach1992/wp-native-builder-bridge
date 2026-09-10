@@ -226,18 +226,18 @@ final class OAuth_Server {
 	 */
 	public function authorization_server_metadata() {
 		return array(
-			'issuer'                                         => $this->issuer_url(),
-			'authorization_endpoint'                         => $this->authorization_endpoint_url(),
-			'token_endpoint'                                 => $this->token_endpoint_url(),
-			'revocation_endpoint'                            => $this->revocation_endpoint_url(),
+			'issuer'                                     => $this->issuer_url(),
+			'authorization_endpoint'                     => $this->authorization_endpoint_url(),
+			'token_endpoint'                             => $this->token_endpoint_url(),
+			'revocation_endpoint'                        => $this->revocation_endpoint_url(),
 			'authorization_response_iss_parameter_supported' => true,
-			'client_id_metadata_document_supported'          => true,
-			'token_endpoint_auth_methods_supported'          => array( 'none' ),
-			'revocation_endpoint_auth_methods_supported'     => array( 'none' ),
-			'grant_types_supported'                          => array( 'authorization_code', 'refresh_token' ),
-			'response_types_supported'                       => array( 'code' ),
-			'code_challenge_methods_supported'               => array( 'S256' ),
-			'scopes_supported'                               => $this->supported_scopes(),
+			'client_id_metadata_document_supported'      => true,
+			'token_endpoint_auth_methods_supported'      => array( 'none' ),
+			'revocation_endpoint_auth_methods_supported' => array( 'none' ),
+			'grant_types_supported'                      => array( 'authorization_code', 'refresh_token' ),
+			'response_types_supported'                   => array( 'code' ),
+			'code_challenge_methods_supported'           => array( 'S256' ),
+			'scopes_supported'                           => $this->supported_scopes(),
 		);
 	}
 
