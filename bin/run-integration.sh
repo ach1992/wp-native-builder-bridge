@@ -117,7 +117,7 @@ echo "== release uninstall cleanup =="
 "${wp[@]}" option update wp_native_builder_bridge_recent_actions '[{"ability":"fixture"}]' --format=json --allow-root >/dev/null
 "${wp[@]}" option update wp_native_builder_bridge_oauth_instance '0123456789abcdef0123456789abcdef' --allow-root >/dev/null
 "${wp[@]}" transient set wpnb_oauth_chatgpt_cimd_ok 1 900 --allow-root >/dev/null
-"${wp[@]}" transient set wpnb_oauth_chatgpt_jwks '[{"kid":"fixture"}]' 900 --format=json --allow-root >/dev/null
+"${wp[@]}" transient set wpnb_oauth_chatgpt_jwks '[{"kid":"fixture"}]' 900 --allow-root >/dev/null
 "${wp[@]}" transient set wpnb_oauth_chatgpt_jwks_refresh 1 60 --allow-root >/dev/null
 "${wp[@]}" option update wpnb_oauth_assertion_0123456789abcdef0123456789abcdef01234567 "$(date +%s)" --allow-root >/dev/null
 "${wp[@]}" cron event schedule wpnb_oauth_cleanup_client_assertion '+10 minutes' --allow-root >/dev/null
