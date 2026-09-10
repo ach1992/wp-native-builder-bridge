@@ -281,6 +281,11 @@ final class OAuth_Server {
 	 */
 	public function authenticate_mcp_request( $request ) {
 		$this->auth_state = 'missing';
+		if ( ! $this->is_https_ready() ) {
+			$this->auth_state = 'invalid';
+			return false;
+		}
+
 		if ( ! $request instanceof \WP_REST_Request ) {
 			$this->auth_state = 'invalid';
 			return false;
@@ -319,12 +324,12 @@ final class OAuth_Server {
 			return false;
 		}
 
-		wp_set_current_user( (int) $claims['user_id'] );
 		if ( ! user_can( $user, 'read' ) ) {
 			$this->auth_state = 'forbidden';
 			return false;
 		}
 
+		wp_set_current_user( (int) $claims['user_id'] );
 		$this->auth_state = 'authenticated';
 		return true;
 	}
@@ -361,6 +366,10 @@ final class OAuth_Server {
 	 * @return \WP_REST_Response Token or OAuth error response.
 	 */
 	public function handle_token_request( $request ) {
+		if ( ! $this->is_https_ready() ) {
+			return $this->oauth_error( 'invalid_request', 'OAuth token issuance requires an HTTPS MCP resource.' );
+		}
+
 		$grant_type = $this->bounded_param( $request, 'grant_type', 64 );
 		if ( 'authorization_code' === $grant_type ) {
 			return $this->exchange_authorization_code( $request );
@@ -380,6 +389,10 @@ final class OAuth_Server {
 	 * @return \WP_REST_Response Empty success response.
 	 */
 	public function handle_revoke_request( $request ) {
+		if ( ! $this->is_https_ready() ) {
+			return $this->oauth_error( 'invalid_request', 'OAuth token revocation requires an HTTPS MCP resource.' );
+		}
+
 		$token = $this->bounded_param( $request, 'token', 256 );
 		if ( '' !== $token ) {
 			$this->store->revoke( $token );
@@ -439,6 +452,10 @@ final class OAuth_Server {
 	 * @return array<string,string>|\WP_Error Valid request or error.
 	 */
 	private function validate_authorization_request( array $params ) {
+		if ( ! $this->is_https_ready() ) {
+			return new \WP_Error( 'invalid_request', 'OAuth authorization requires an HTTPS MCP resource.' );
+		}
+
 		$client_id     = $this->bounded_array_value( $params, 'client_id', 256 );
 		$redirect_uri  = $this->bounded_array_value( $params, 'redirect_uri', 512 );
 		$response_type = $this->bounded_array_value( $params, 'response_type', 32 );

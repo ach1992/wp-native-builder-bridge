@@ -32,7 +32,7 @@ done
 
 wp=("${compose[@]}" run --rm cli)
 "${wp[@]}" core install \
-    --url=http://localhost \
+    --url=https://localhost \
     --title='WP Native Builder Bridge Integration' \
     --admin_user=admin \
     --admin_password='integration-only-password' \
@@ -73,6 +73,14 @@ done
 # Configure it after the site-settings regression has completed so the HTTP fixture
 # cannot change the baseline that Issue #4 intentionally verifies/restores.
 "${wp[@]}" rewrite structure '/%postname%/' --hard --allow-root >/dev/null
+http_binding="$("${compose[@]}" port wordpress 80 | tail -n 1)"
+http_port="${http_binding##*:}"
+if [[ ! "$http_port" =~ ^[1-9][0-9]*$ ]]; then
+    echo "ERROR: Could not resolve the isolated WordPress HTTP port." >&2
+    exit 1
+fi
+WPNB_HTTP_BASE_URL="http://127.0.0.1:${http_port}" \
+WPNB_PUBLIC_ORIGIN='https://localhost' \
 bash "$root/bin/run-direct-http-smoke.sh"
 
 "${wp[@]}" eval-file wp-content/plugins/wp-native-builder-bridge/tests/integration/issue4-code-snippets-smoke.php --user=1 --allow-root

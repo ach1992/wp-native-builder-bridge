@@ -2,7 +2,7 @@
 set -euo pipefail
 
 base_url="${WPNB_HTTP_BASE_URL:-http://127.0.0.1:18080}"
-public_origin="${WPNB_PUBLIC_ORIGIN:-http://localhost}"
+public_origin="${WPNB_PUBLIC_ORIGIN:-https://localhost}"
 host_header="${WPNB_HTTP_HOST:-localhost}"
 resource="${public_origin}/wp-json/wp-native-builder/v1/mcp"
 protected_metadata="${public_origin}/.well-known/oauth-protected-resource"

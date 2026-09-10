@@ -89,5 +89,45 @@ wpnb_issue6_oauth_negative_assert(
 );
 $store->revoke( $missing_user );
 
+// OAuth credentials must never be accepted or mutated when the canonical MCP resource is not HTTPS.
+$secure_home    = get_option( 'home' );
+$secure_siteurl = get_option( 'siteurl' );
+$insecure_token = $store->issue( OAuth_Store::TYPE_ACCESS, $base_claims, 60 );
+try {
+	update_option( 'home', 'http://localhost', false );
+	update_option( 'siteurl', 'http://localhost', false );
+	$insecure_oauth = new OAuth_Server( $store );
+	wpnb_issue6_oauth_negative_assert( false === $insecure_oauth->is_https_ready(), 'HTTP fixture unexpectedly reports HTTPS readiness.' );
+
+	wp_set_current_user( 0 );
+	wpnb_issue6_oauth_negative_assert(
+		false === $insecure_oauth->authenticate_mcp_request( wpnb_issue6_oauth_bearer_request( $insecure_token ) ),
+		'Bearer authentication was accepted for an HTTP MCP resource.'
+	);
+	wpnb_issue6_oauth_negative_assert( 0 === get_current_user_id(), 'Rejected HTTP Bearer authentication changed the current WordPress user.' );
+
+	$insecure_request = new WP_REST_Request( 'POST', '/wp-native-builder/v1/oauth/token' );
+	$insecure_request->set_param( 'grant_type', 'refresh_token' );
+	$insecure_response = $insecure_oauth->handle_token_request( $insecure_request );
+	wpnb_issue6_oauth_negative_assert( 400 === $insecure_response->get_status(), 'HTTP token endpoint did not fail closed.' );
+	wpnb_issue6_oauth_negative_assert( 'invalid_request' === ( $insecure_response->get_data()['error'] ?? '' ), 'HTTP token endpoint returned the wrong OAuth error.' );
+
+	$revoke_request = new WP_REST_Request( 'POST', '/wp-native-builder/v1/oauth/revoke' );
+	$revoke_request->set_param( 'token', $insecure_token );
+	$revoke_response = $insecure_oauth->handle_revoke_request( $revoke_request );
+	wpnb_issue6_oauth_negative_assert( 400 === $revoke_response->get_status(), 'HTTP revocation endpoint did not fail closed.' );
+} finally {
+	update_option( 'home', $secure_home, false );
+	update_option( 'siteurl', $secure_siteurl, false );
+}
+
+$restored_oauth = new OAuth_Server( $store );
+wp_set_current_user( 0 );
+wpnb_issue6_oauth_negative_assert(
+	true === $restored_oauth->authenticate_mcp_request( wpnb_issue6_oauth_bearer_request( $insecure_token ) ),
+	'HTTP revocation attempt mutated a token despite the fail-closed transport guard.'
+);
+$store->revoke( $insecure_token );
+
 wp_set_current_user( $user_id );
 echo "PASS: Issue #6 direct OAuth negative bearer regressions.\n";

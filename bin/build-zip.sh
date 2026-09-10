@@ -50,16 +50,25 @@ required=(
     "wp-native-builder-bridge/src/class-plugin.php"
 )
 for path in "${required[@]}"; do
-    if ! printf '%s\n' "${entries[@]}" | grep -Fxq "$path"; then
+    found=0
+    for entry in "${entries[@]}"; do
+        if [[ "$entry" == "$path" ]]; then
+            found=1
+            break
+        fi
+    done
+    if [[ "$found" != "1" ]]; then
         echo "ERROR: release ZIP is missing $path" >&2
         exit 1
     fi
 done
 
-if printf '%s\n' "${entries[@]}" | grep -Eq '(^|/)(\.git|\.github|tests|vendor|node_modules|build|composer\.(json|lock)|MASTER-SPEC\.md)(/|$)'; then
-    echo "ERROR: release ZIP contains development-only files." >&2
-    exit 1
-fi
+for entry in "${entries[@]}"; do
+    if [[ "$entry" =~ (^|/)(\.git|\.github|tests|vendor|node_modules|build|composer\.(json|lock)|MASTER-SPEC\.md)(/|$) ]]; then
+        echo "ERROR: release ZIP contains development-only files." >&2
+        exit 1
+    fi
+done
 
 extract_dir="$build_dir/verify"
 rm -rf "$extract_dir"
