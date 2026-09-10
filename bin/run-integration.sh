@@ -84,7 +84,14 @@ if [[ "${RUN_OPTIONAL_PROVIDERS:-0}" == "1" ]]; then
     echo "== GFAPI transport contract fixture =="
     "${compose[@]}" exec -T wordpress mkdir -p /var/www/html/wp-content/mu-plugins
     "${compose[@]}" exec -T wordpress cp /var/www/html/wp-content/plugins/wp-native-builder-bridge/tests/fixtures/gravity-forms-contract.php /var/www/html/wp-content/mu-plugins/wpnb-gravity-forms-contract.php
-    "${wp[@]}" user add-cap 1 gravityforms_view_forms gravityforms_create_form gravityforms_edit_forms gravityforms_delete_forms --allow-root
+    for capability in \
+        gravityforms_view_forms \
+        gravityforms_create_form \
+        gravityforms_edit_forms \
+        gravityforms_delete_forms
+    do
+        "${wp[@]}" user add-cap 1 "$capability" --allow-root >/dev/null
+    done
     bash "$root/bin/run-mcp-provider-smoke.sh"
 fi
 
