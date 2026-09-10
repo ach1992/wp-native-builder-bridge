@@ -1,0 +1,59 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  quality:
+    name: Quality / PHP 8.4
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240 # v2
+        with:
+          php-version: '8.4'
+          extensions: zip
+          coverage: none
+          tools: composer:v2
+
+      - name: Install development dependencies
+        run: composer install --no-interaction --no-progress --prefer-dist
+
+      - name: Run quality gates
+        run: composer check
+
+      - name: Upload validated plugin ZIP
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: wp-native-builder-bridge
+          path: build/wp-native-builder-bridge.zip
+          if-no-files-found: error
+          retention-days: 7
+
+  integration:
+    name: Integration / ${{ matrix.wordpress_tag }}
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - wordpress_tag: 6.9-php8.4-apache
+            optional_providers: '0'
+          - wordpress_tag: php8.4-apache
+            optional_providers: '1'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - name: Run isolated WordPress integration suite
+        env:
+          RUN_OPTIONAL_PROVIDERS: '${{ matrix.optional_providers }}'
+        run: bash bin/run-integration.sh '${{ matrix.wordpress_tag }}'

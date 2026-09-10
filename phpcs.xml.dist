@@ -1,0 +1,14 @@
+<?xml version="1.0"?>
+<ruleset name="WP Native Builder Bridge">
+    <description>Production WordPress coding and PHP 8.4+ compatibility checks.</description>
+
+    <arg name="extensions" value="php" />
+    <arg name="colors" />
+    <config name="testVersion" value="8.4-" />
+
+    <file>wp-native-builder-bridge.php</file>
+    <file>src</file>
+
+    <rule ref="WordPress-Core" />
+    <rule ref="PHPCompatibilityWP" />
+</ruleset>

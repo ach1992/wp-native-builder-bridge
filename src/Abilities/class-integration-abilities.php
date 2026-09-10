@@ -36,7 +36,11 @@ final class Integration_Abilities {
 				'label'               => __( 'Integration Status', 'wp-native-builder-bridge' ),
 				'description'         => __( 'Reports supported optional provider integration modes and observed public provider abilities without requiring those providers.', 'wp-native-builder-bridge' ),
 				'category'            => Registrar::CATEGORY,
-				'input_schema'        => array( 'type' => 'object', 'properties' => array(), 'additionalProperties' => false ),
+				'input_schema'        => array(
+					'type'                 => 'object',
+					'properties'           => array(),
+					'additionalProperties' => false,
+				),
 				'output_schema'       => $this->output_schema(),
 				'execute_callback'    => array( $this, 'execute' ),
 				'permission_callback' => array( $this, 'can_execute' ),
@@ -99,9 +103,9 @@ final class Integration_Abilities {
 	/**
 	 * Reports only exact verified provider abilities that belong to the ordinary builder workflow.
 	 *
-	 * @param bool                $installed Provider installed.
-	 * @param string              $version Provider version.
-	 * @param array<int,string>   $candidates Exact stable ability names.
+	 * @param bool              $installed Provider installed.
+	 * @param string            $version Provider version.
+	 * @param array<int,string> $candidates Exact stable ability names.
 	 * @return array<string,mixed>
 	 */
 	private function provider_exact( $installed, $version, array $candidates ) {
@@ -137,9 +141,15 @@ final class Integration_Abilities {
 	/** @return bool */
 	private function code_snippets_api_available() {
 		$functions = array(
-			'Code_Snippets\\code_snippets', 'Code_Snippets\\get_snippet', 'Code_Snippets\\get_snippets', 'Code_Snippets\\save_snippet',
-			'Code_Snippets\\activate_snippet', 'Code_Snippets\\deactivate_snippet', 'Code_Snippets\\trash_snippet',
-			'Code_Snippets\\restore_snippet', 'Code_Snippets\\delete_snippet',
+			'Code_Snippets\\code_snippets',
+			'Code_Snippets\\get_snippet',
+			'Code_Snippets\\get_snippets',
+			'Code_Snippets\\save_snippet',
+			'Code_Snippets\\activate_snippet',
+			'Code_Snippets\\deactivate_snippet',
+			'Code_Snippets\\trash_snippet',
+			'Code_Snippets\\restore_snippet',
+			'Code_Snippets\\delete_snippet',
 		);
 		if ( ! class_exists( 'Code_Snippets\\Model\\Snippet' ) ) {
 			return false;
@@ -159,15 +169,26 @@ final class Integration_Abilities {
 			'properties'           => array(
 				'installed'     => array( 'type' => 'boolean' ),
 				'version'       => array( 'type' => 'string' ),
-				'mode'          => array( 'type' => 'string', 'enum' => array( 'ability', 'api_fallback', 'unavailable' ) ),
-				'ability_names' => array( 'type' => 'array', 'items' => array( 'type' => 'string' ) ),
+				'mode'          => array(
+					'type' => 'string',
+					'enum' => array( 'ability', 'api_fallback', 'unavailable' ),
+				),
+				'ability_names' => array(
+					'type'  => 'array',
+					'items' => array( 'type' => 'string' ),
+				),
 			),
 			'required'             => array( 'installed', 'version', 'mode', 'ability_names' ),
 			'additionalProperties' => false,
 		);
 		return array(
 			'type'                 => 'object',
-			'properties'           => array( 'astra' => $item, 'gravity_forms' => $item, 'code_snippets' => $item, 'woocommerce' => $item ),
+			'properties'           => array(
+				'astra'         => $item,
+				'gravity_forms' => $item,
+				'code_snippets' => $item,
+				'woocommerce'   => $item,
+			),
 			'required'             => array( 'astra', 'gravity_forms', 'code_snippets', 'woocommerce' ),
 			'additionalProperties' => false,
 		);
@@ -176,8 +197,15 @@ final class Integration_Abilities {
 	/** @return array<string,mixed> */
 	private function meta() {
 		return array(
-			'mcp' => array( 'public' => true, 'type' => 'tool' ),
-			'annotations' => array( 'readonly' => true, 'destructive' => false, 'idempotent' => true ),
+			'mcp'         => array(
+				'public' => true,
+				'type'   => 'tool',
+			),
+			'annotations' => array(
+				'readonly'    => true,
+				'destructive' => false,
+				'idempotent'  => true,
+			),
 		);
 	}
 }

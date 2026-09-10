@@ -33,11 +33,11 @@ final class Mutation_Log {
 			array(
 				'timestamp'   => gmdate( 'c' ),
 				'user_id'     => get_current_user_id(),
-				'ability'     => sanitize_text_field( (string) $ability ),
-				'target_type' => sanitize_key( (string) $target_type ),
+				'ability'     => substr( sanitize_text_field( (string) $ability ), 0, 160 ),
+				'target_type' => substr( sanitize_key( (string) $target_type ), 0, 64 ),
 				'target_id'   => absint( $target_id ),
 				'success'     => (bool) $success,
-				'error_code'  => sanitize_key( (string) $error_code ),
+				'error_code'  => substr( sanitize_key( (string) $error_code ), 0, 100 ),
 			)
 		);
 

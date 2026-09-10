@@ -1,0 +1,31 @@
+{
+  "name": "ach1992/wp-native-builder-bridge",
+  "description": "Development quality tooling for WP Native Builder Bridge.",
+  "type": "wordpress-plugin",
+  "require-dev": {
+    "dealerdirect/phpcodesniffer-composer-installer": "^1.2",
+    "phpcompatibility/phpcompatibility-wp": "^2.1",
+    "wp-coding-standards/wpcs": "^3.4",
+    "ext-zip": "*"
+  },
+  "config": {
+    "allow-plugins": {
+      "dealerdirect/phpcodesniffer-composer-installer": true
+    },
+    "sort-packages": true
+  },
+  "scripts": {
+    "lint": "bash bin/lint-php.sh",
+    "test": "php tests/run.php",
+    "phpcs": "phpcs",
+    "build": "bash bin/build-zip.sh",
+    "check": [
+      "@lint",
+      "@test",
+      "@phpcs",
+      "@safety",
+      "@build"
+    ],
+    "safety": "bash bin/static-safety-check.sh"
+  }
+}

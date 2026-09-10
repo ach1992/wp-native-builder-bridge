@@ -30,43 +30,52 @@ final class Site_Config_Abilities {
 		wp_register_ability(
 			'wp-native-builder/site-settings-read',
 			array(
-				'label' => __( 'Read Site Settings', 'wp-native-builder-bridge' ),
-				'description' => __( 'Reads the bounded Core WordPress settings used for site building without exposing arbitrary options.', 'wp-native-builder-bridge' ),
-				'category' => Registrar::CATEGORY,
-				'input_schema' => array( 'type' => 'object', 'properties' => array(), 'additionalProperties' => false ),
-				'output_schema' => $this->settings_schema(),
-				'execute_callback' => array( $this, 'read' ),
+				'label'               => __( 'Read Site Settings', 'wp-native-builder-bridge' ),
+				'description'         => __( 'Reads the bounded Core WordPress settings used for site building without exposing arbitrary options.', 'wp-native-builder-bridge' ),
+				'category'            => Registrar::CATEGORY,
+				'input_schema'        => array(
+					'type'                 => 'object',
+					'properties'           => array(),
+					'additionalProperties' => false,
+				),
+				'output_schema'       => $this->settings_schema(),
+				'execute_callback'    => array( $this, 'read' ),
 				'permission_callback' => array( $this, 'can_read' ),
-				'meta' => $this->meta( true, false, true ),
+				'meta'                => $this->meta( true, false, true ),
 			)
 		);
 		wp_register_ability(
 			'wp-native-builder/site-settings-update',
 			array(
-				'label' => __( 'Update Site Settings', 'wp-native-builder-bridge' ),
-				'description' => __( 'Updates only the named builder-relevant Core WordPress settings and reports permalink/front-page impact.', 'wp-native-builder-bridge' ),
-				'category' => Registrar::CATEGORY,
-				'input_schema' => $this->update_schema(),
-				'output_schema' => array(
-					'type' => 'object',
-					'properties' => array(
-						'settings' => $this->settings_schema(),
-						'changed' => array( 'type' => 'array', 'items' => array( 'type' => 'string' ) ),
-						'rewrite_flushed' => array( 'type' => 'boolean' ),
+				'label'               => __( 'Update Site Settings', 'wp-native-builder-bridge' ),
+				'description'         => __( 'Updates only the named builder-relevant Core WordPress settings and reports permalink/front-page impact.', 'wp-native-builder-bridge' ),
+				'category'            => Registrar::CATEGORY,
+				'input_schema'        => $this->update_schema(),
+				'output_schema'       => array(
+					'type'                 => 'object',
+					'properties'           => array(
+						'settings'           => $this->settings_schema(),
+						'changed'            => array(
+							'type'  => 'array',
+							'items' => array( 'type' => 'string' ),
+						),
+						'rewrite_flushed'    => array( 'type' => 'boolean' ),
 						'front_page_changed' => array( 'type' => 'boolean' ),
 					),
-					'required' => array( 'settings', 'changed', 'rewrite_flushed', 'front_page_changed' ),
+					'required'             => array( 'settings', 'changed', 'rewrite_flushed', 'front_page_changed' ),
 					'additionalProperties' => false,
 				),
-				'execute_callback' => array( $this, 'update' ),
+				'execute_callback'    => array( $this, 'update' ),
 				'permission_callback' => array( $this, 'can_update' ),
-				'meta' => $this->meta( false, false, false ),
+				'meta'                => $this->meta( false, false, false ),
 			)
 		);
 	}
 
-	/** @return bool */ public function can_read() { return $this->permissions->allowed( Settings::GROUP_SITE_READ, 'manage_options' ); }
-	/** @return bool */ public function can_update() { return $this->permissions->allowed( Settings::GROUP_SITE_CONFIG, 'manage_options' ); }
+	/** @return bool */ public function can_read() {
+		return $this->permissions->allowed( Settings::GROUP_SITE_READ, 'manage_options' ); }
+	/** @return bool */ public function can_update() {
+		return $this->permissions->allowed( Settings::GROUP_SITE_CONFIG, 'manage_options' ); }
 
 	/** @return array<string,mixed> */
 	public function read() {
@@ -120,65 +129,124 @@ final class Site_Config_Abilities {
 			}
 			update_option( $option, $value );
 			$changed[] = $key;
-			if ( 'permalink_structure' === $key ) { $rewrite = true; }
-			if ( in_array( $key, array( 'show_on_front', 'page_on_front', 'page_for_posts' ), true ) ) { $front = true; }
+			if ( 'permalink_structure' === $key ) {
+				$rewrite = true; }
+			if ( in_array( $key, array( 'show_on_front', 'page_on_front', 'page_for_posts' ), true ) ) {
+				$front = true; }
 		}
 		if ( $rewrite && function_exists( 'flush_rewrite_rules' ) ) {
 			flush_rewrite_rules( false );
 		}
-		$this->log->record( 'wp-native-builder/site-settings-update', 'site', 0, true, '');
-		return array( 'settings' => $this->read(), 'changed' => $changed, 'rewrite_flushed' => $rewrite, 'front_page_changed' => $front );
+		$this->log->record( 'wp-native-builder/site-settings-update', 'site', 0, true, '' );
+		return array(
+			'settings'           => $this->read(),
+			'changed'            => $changed,
+			'rewrite_flushed'    => $rewrite,
+			'front_page_changed' => $front,
+		);
 	}
 
 	/** @param int $id Page ID. @return bool */
 	private function valid_page_id( $id ) {
-		if ( 0 === $id ) { return true; }
+		if ( 0 === $id ) {
+			return true; }
 		$post = get_post( $id );
 		return $post && 'page' === $post->post_type && current_user_can( 'edit_post', $id );
 	}
 	/** @param string $key Key. @return string */
 	private function option_name( $key ) {
-		$map = array( 'site_title' => 'blogname', 'tagline' => 'blogdescription', 'show_on_front' => 'show_on_front', 'page_on_front' => 'page_on_front', 'page_for_posts' => 'page_for_posts', 'posts_per_page' => 'posts_per_page', 'permalink_structure' => 'permalink_structure' );
+		$map = array(
+			'site_title'          => 'blogname',
+			'tagline'             => 'blogdescription',
+			'show_on_front'       => 'show_on_front',
+			'page_on_front'       => 'page_on_front',
+			'page_for_posts'      => 'page_for_posts',
+			'posts_per_page'      => 'posts_per_page',
+			'permalink_structure' => 'permalink_structure',
+		);
 		return $map[ $key ];
 	}
 	/** @param string $key Key. @param mixed $value Value. @return mixed */
 	private function sanitize_value( $key, $value ) {
-		if ( in_array( $key, array( 'page_on_front', 'page_for_posts', 'posts_per_page' ), true ) ) { return absint( $value ); }
-		if ( 'show_on_front' === $key ) { return (string) $value; }
-		if ( 'permalink_structure' === $key ) { return (string) sanitize_option( 'permalink_structure', (string) $value ); }
+		if ( in_array( $key, array( 'page_on_front', 'page_for_posts', 'posts_per_page' ), true ) ) {
+			return absint( $value ); }
+		if ( 'show_on_front' === $key ) {
+			return (string) $value; }
+		if ( 'permalink_structure' === $key ) {
+			return (string) sanitize_option( 'permalink_structure', (string) $value ); }
 		return sanitize_text_field( (string) $value );
 	}
 	/** @return array<string,mixed> */
 	private function settings_schema() {
 		return array(
-			'type' => 'object',
-			'properties' => array(
-				'site_title' => array( 'type' => 'string' ), 'tagline' => array( 'type' => 'string' ),
-				'show_on_front' => array( 'type' => 'string', 'enum' => array( 'posts', 'page' ) ),
-				'page_on_front' => array( 'type' => 'integer' ), 'page_for_posts' => array( 'type' => 'integer' ),
-				'posts_per_page' => array( 'type' => 'integer' ), 'permalink_structure' => array( 'type' => 'string' ),
+			'type'                 => 'object',
+			'properties'           => array(
+				'site_title'          => array( 'type' => 'string' ),
+				'tagline'             => array( 'type' => 'string' ),
+				'show_on_front'       => array(
+					'type' => 'string',
+					'enum' => array( 'posts', 'page' ),
+				),
+				'page_on_front'       => array( 'type' => 'integer' ),
+				'page_for_posts'      => array( 'type' => 'integer' ),
+				'posts_per_page'      => array( 'type' => 'integer' ),
+				'permalink_structure' => array( 'type' => 'string' ),
 			),
-			'required' => array( 'site_title', 'tagline', 'show_on_front', 'page_on_front', 'page_for_posts', 'posts_per_page', 'permalink_structure' ),
+			'required'             => array( 'site_title', 'tagline', 'show_on_front', 'page_on_front', 'page_for_posts', 'posts_per_page', 'permalink_structure' ),
 			'additionalProperties' => false,
 		);
 	}
 	/** @return array<string,mixed> */
 	private function update_schema() {
 		return array(
-			'type' => 'object',
-			'properties' => array(
-				'site_title' => array( 'type' => 'string', 'maxLength' => 200 ), 'tagline' => array( 'type' => 'string', 'maxLength' => 500 ),
-				'show_on_front' => array( 'type' => 'string', 'enum' => array( 'posts', 'page' ) ),
-				'page_on_front' => array( 'type' => 'integer', 'minimum' => 0 ), 'page_for_posts' => array( 'type' => 'integer', 'minimum' => 0 ),
-				'posts_per_page' => array( 'type' => 'integer', 'minimum' => 1, 'maximum' => 100 ),
-				'permalink_structure' => array( 'type' => 'string', 'maxLength' => 200 ),
+			'type'                 => 'object',
+			'properties'           => array(
+				'site_title'          => array(
+					'type'      => 'string',
+					'maxLength' => 200,
+				),
+				'tagline'             => array(
+					'type'      => 'string',
+					'maxLength' => 500,
+				),
+				'show_on_front'       => array(
+					'type' => 'string',
+					'enum' => array( 'posts', 'page' ),
+				),
+				'page_on_front'       => array(
+					'type'    => 'integer',
+					'minimum' => 0,
+				),
+				'page_for_posts'      => array(
+					'type'    => 'integer',
+					'minimum' => 0,
+				),
+				'posts_per_page'      => array(
+					'type'    => 'integer',
+					'minimum' => 1,
+					'maximum' => 100,
+				),
+				'permalink_structure' => array(
+					'type'      => 'string',
+					'maxLength' => 200,
+				),
 			),
-			'minProperties' => 1,
+			'minProperties'        => 1,
 			'additionalProperties' => false,
 		);
 	}
-	/** @param bool $readonly Readonly. @param bool $destructive Destructive. @param bool $idempotent Idempotent. @return array<string,mixed> */
-	private function meta( $readonly, $destructive, $idempotent ) {
-		return array( 'mcp' => array( 'public' => true, 'type' => 'tool' ), 'annotations' => array( 'readonly' => $readonly, 'destructive' => $destructive, 'idempotent' => $idempotent ) );
+	/** @param bool $is_readonly Read-only. @param bool $destructive Destructive. @param bool $idempotent Idempotent. @return array<string,mixed> */
+	private function meta( $is_readonly, $destructive, $idempotent ) {
+		return array(
+			'mcp'         => array(
+				'public' => true,
+				'type'   => 'tool',
+			),
+			'annotations' => array(
+				'readonly'    => $is_readonly,
+				'destructive' => $destructive,
+				'idempotent'  => $idempotent,
+			),
+		);
 	}
 }
