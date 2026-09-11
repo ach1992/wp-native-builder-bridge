@@ -116,7 +116,7 @@ If a future real use case needs a privileged operation, add a bounded typed abil
 Keep the UI small. Use one settings page under WordPress administration, for example:
 
 ```text
-Settings -> WP Native Builder
+WP Native Builder -> Settings
 ```
 
 The page should show:
@@ -525,11 +525,11 @@ The bridge must make these workflows possible when the relevant access group is 
 13. On a representative non-Astra/non-default site, generic content/CPT/taxonomy/media/block/navigation capabilities remain usable through standard WordPress contracts.
 14. When an installed provider has neither a suitable Ability nor a supported public API for a requested provider-specific operation, report the limitation cleanly without private-storage coupling.
 
-## 16. Persistent Workspace and project continuity (post-v0.1)
+## 16. Persistent Workspace and project continuity (required before first public release)
 
-The companion `wp-native-builder` Skill has an accepted post-v0.1 requirement for WordPress-hosted project continuity. The detailed Bridge-owned storage/ability/admin contract lives in [`docs/PROJECT-WORKSPACE-ARCHITECTURE.md`](./docs/PROJECT-WORKSPACE-ARCHITECTURE.md). Issue #8 owns Bridge implementation and Bridge-local validation.
+The companion `wp-native-builder` Skill has an accepted requirement for WordPress-hosted project continuity. The detailed Bridge-owned storage/ability/admin contract lives in [`docs/PROJECT-WORKSPACE-ARCHITECTURE.md`](./docs/PROJECT-WORKSPACE-ARCHITECTURE.md). Issue #8 owns Bridge implementation and Bridge-local validation.
 
-This feature is a **post-v0.1 follow-on**. It does not expand or block the current v0.1 completion path in Issues #1–#6.
+Owner scope revision (2026-09-11): this feature is part of the **first public v0.1 release gate**. Issue #8 must be implemented and integrated before final Issue #6 publication approval.
 
 Durable requirements:
 
@@ -586,7 +586,7 @@ The first complete release is successful when:
 - no arbitrary execution or credential-retrieval backdoor is introduced;
 - core tests and CI pass and a normal installable WordPress plugin ZIP can be produced.
 
-The Persistent Workspace is a separately tracked post-v0.1 outcome and is not required to declare the current v0.1 release complete.
+The Persistent Workspace is separately tracked in Issue #8 and is required before the first public v0.1 release is declared complete.
 
 ## 19. Delivery strategy
 
@@ -598,9 +598,10 @@ Bootstrap + dependency + permissions
   -> Optional integrations + advanced administration
   -> Safety/concurrency + automated tests
   -> Real MCP/ChatGPT integration test
-  -> Documentation + installable release
+  -> Persistent Workspace + admin UX
+  -> Final documentation + installable release
 ```
 
 The intended result is a small powerful bridge, not a large platform. Add complexity only when a real ability or verified interoperability requirement needs it. Reuse existing stable WordPress Abilities where that removes duplicate work without creating new dependency sprawl.
 
-After v0.1 is shipped, Persistent Workspace implementation/validation continues through Issue #8 and the detailed Workspace architecture without retroactively expanding the v0.1 release gate.
+Before public v0.1 publication, Persistent Workspace implementation/validation completes through Issue #8 and the detailed Workspace architecture, followed by final Issue #6 release validation.

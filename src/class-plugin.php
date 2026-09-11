@@ -11,8 +11,10 @@ use WP_Native_Builder_Bridge\Abilities\Registrar;
 use WP_Native_Builder_Bridge\Admin\Settings_Page;
 use WP_Native_Builder_Bridge\Auth\OAuth_Server;
 use WP_Native_Builder_Bridge\Support\Environment;
+use WP_Native_Builder_Bridge\Support\Mutation_Log;
 use WP_Native_Builder_Bridge\Support\Permissions;
 use WP_Native_Builder_Bridge\Support\Settings;
+use WP_Native_Builder_Bridge\Workspace\Store;
 
 /**
  * Wires the bridge services into WordPress.
@@ -75,6 +77,13 @@ final class Plugin {
 	private $settings_page;
 
 	/**
+	 * Persistent Workspace store.
+	 *
+	 * @var Store
+	 */
+	private $workspace;
+
+	/**
 	 * Gets the plugin singleton.
 	 *
 	 * @return self
@@ -106,16 +115,21 @@ final class Plugin {
 		$this->environment   = new Environment();
 		$this->settings      = new Settings();
 		$this->permissions   = new Permissions( $this->settings );
-		$this->registrar     = new Registrar( $this->environment, $this->settings, $this->permissions );
+		$this->workspace     = new Store();
+		$this->registrar     = new Registrar( $this->environment, $this->settings, $this->permissions, $this->workspace );
 		$this->oauth_server  = new OAuth_Server();
-		$this->settings_page = new Settings_Page( $this->environment, $this->settings, $this->oauth_server );
+		$this->settings_page = new Settings_Page( $this->environment, $this->settings, $this->oauth_server, $this->workspace, new Mutation_Log() );
 
 		$this->oauth_server->boot();
 
 		add_action( 'init', array( $this, 'load_textdomain' ), 1 );
+		add_action( 'init', array( $this->workspace, 'register_post_types' ), 5 );
 		add_action( 'admin_init', array( $this->settings, 'register' ) );
 		add_action( 'admin_menu', array( $this->settings_page, 'register_menu' ) );
+		add_action( 'admin_post_wpnb_workspace_export', array( $this->settings_page, 'handle_export' ) );
+		add_action( 'admin_post_wpnb_workspace_clear', array( $this->settings_page, 'handle_clear' ) );
 		add_action( 'admin_notices', array( $this, 'render_dependency_notices' ) );
+		add_filter( 'plugin_action_links_' . plugin_basename( WP_NATIVE_BUILDER_BRIDGE_FILE ), array( $this, 'plugin_action_links' ) );
 		add_action( 'wp_abilities_api_categories_init', array( $this->registrar, 'register_category' ) );
 		add_action( 'wp_abilities_api_init', array( $this->registrar, 'register_abilities' ), 100 );
 	}
@@ -131,6 +145,29 @@ final class Plugin {
 			false,
 			dirname( plugin_basename( WP_NATIVE_BUILDER_BRIDGE_FILE ) ) . '/languages/'
 		);
+	}
+
+	/**
+	 * Adds a direct Settings link on the WordPress Plugins screen.
+	 *
+	 * @param array<int,string> $links Existing plugin action links.
+	 * @return array<int,string>
+	 */
+	public function plugin_action_links( $links ) {
+		if ( ! is_array( $links ) ) {
+			$links = array();
+		}
+
+		array_unshift(
+			$links,
+			sprintf(
+				'<a href="%1$s">%2$s</a>',
+				esc_url( admin_url( 'admin.php?page=' . Settings_Page::SETTINGS_SLUG ) ),
+				esc_html__( 'Settings', 'wp-native-builder-bridge' )
+			)
+		);
+
+		return $links;
 	}
 
 	/**

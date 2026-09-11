@@ -1,6 +1,6 @@
 # WP Native Builder Bridge — Persistent Workspace Architecture
 
-Status: Accepted post-v0.1 architecture; not yet implemented
+Status: Accepted pre-release architecture; implementation tracked by Issue #8
 Repository: `ach1992/wp-native-builder-bridge`
 Companion: `ach1992/wp-native-builder`
 
@@ -12,7 +12,7 @@ This is intentionally a small persistence and typed-capability feature inside th
 
 The first model is one Workspace per WordPress site. Multi-workspace/project switching is out of scope until a demonstrated need justifies it.
 
-This feature is post-v0.1. It must not expand or block the current v0.1 delivery path tracked by Issues #1–#6.
+Owner scope revision (2026-09-11): this feature is part of the first public v0.1 release gate. The validated `0.1.0` checkpoint that preceded this revision is a pre-release development build; public publication waits for Issue #8 and final Issue #6 validation.
 
 The companion Skill owns reasoning, retention decisions, task selection, visual-review workflow, and conversational approval. The Bridge owns WordPress-native Workspace storage, typed abilities, isolation, permissions, admin inspection/export/clear behavior, versioning, and deterministic errors.
 
@@ -60,7 +60,7 @@ The preferred shape is a few current useful documents/tasks plus bounded history
 
 ## 4. WordPress-native storage and isolation
 
-Prefer small WordPress-native persistence. The initial implementation may use dedicated private/internal post types such as logical `wpnb_doc` and `wpnb_task`, or an equally simple WordPress-native representation if implementation evidence supports something better.
+The initial implementation uses two dedicated private/internal WordPress post types: `wpnb_doc` and `wpnb_task`. They are storage objects only: public/public-query/REST/editor/navigation surfaces are disabled, and mutable Workspace state is held in one Bridge-owned state payload attached to each internal object.
 
 Workspace objects must be structurally isolated from ordinary site content. If private post types are used, they must be configured so they have no unintended:
 
@@ -95,6 +95,8 @@ WordPress revisions are useful optional history, but their retention can be limi
 6. if the product requires rollback/history that must survive ordinary revision cleaners, retain only the necessary bounded history as Bridge-managed private Workspace snapshot/version records that are **not** WordPress `revision` posts and are not subject to revision-retention semantics;
 7. bounded Workspace history needs an explicit retention policy so durable continuity does not become an unlimited archive;
 8. export must include the current durable Workspace state and any Bridge-managed history that the implementation defines as part of the Workspace recovery contract.
+
+The first public release does not expose rollback/history as a Workspace feature, so it does not create a second snapshot/history store merely for completeness. Current state is authoritative, versioned, exportable, and revision-independent. If durable rollback becomes a real product requirement later, it must use the bounded Bridge-managed history rule above rather than silently depending on WordPress revisions.
 
 The Bridge cannot guarantee survival against a plugin, administrator, database operation, host restore, or other actor that deliberately deletes arbitrary WordPress data. Site/database backups remain the disaster-recovery boundary for catastrophic data loss. The Workspace design only ensures that normal WordPress revision pruning/cleanup is not a required dependency for project continuity.
 
@@ -224,7 +226,7 @@ Routine reversible Workspace document/task writes do not require conversational 
 
 ## 11. Admin UX
 
-When Workspace is implemented, migrate the Bridge administration into a recognizable top-level WordPress area:
+Workspace administration uses a recognizable top-level WordPress area:
 
 ```text
 WP Native Builder
@@ -235,7 +237,7 @@ WP Native Builder
 └── Settings
 ```
 
-This is a post-v0.1 UX evolution. The current v0.1 `Settings -> WP Native Builder` screen remains valid until the Workspace phase is implemented.
+This administration layout is required before the first public v0.1 release. The former `Settings -> WP Native Builder` location is superseded by the top-level area.
 
 ### Dashboard
 
@@ -330,18 +332,18 @@ Bridge implementation must provide observable validation for at least:
 14. no regression in existing Bridge abilities;
 15. connected fresh-chat recovery once both the companion Skill runtime and Bridge Workspace capability are available for joint testing.
 
-The final connected fresh-chat E2E is cross-repository work and should coordinate with the companion Skill's post-v0.1 validation/release program rather than duplicating a second orchestration framework in this repository.
+The final connected fresh-chat E2E is cross-repository work and should coordinate with the companion Skill validation/release program rather than duplicating a second orchestration framework in this repository.
 
 ## 16. Dependencies and sequencing
 
-- Current v0.1 delivery remains Issues #1–#6 and is not blocked by Workspace.
-- Workspace implementation begins post-v0.1.
+- First-public-release delivery is Issues #1–#6 plus Issue #8.
+- Issue #8 must integrate before the final Issue #6 release-validation/publication gate.
 - The generic content/CPT safety boundary in Issue #3 must be integrated before Workspace relies on private internal post types.
 - Bridge-local Workspace implementation/validation is tracked in the dedicated Workspace Issue created from this architecture reconciliation.
 - Companion Skill runtime behavior is tracked in `ach1992/wp-native-builder#14`.
 - Connected fresh-chat E2E/package validation is coordinated with `ach1992/wp-native-builder#16` after both sides provide the required runtime capability.
 
-Do not implement Workspace on the active Issue #3 branch. Keep this architecture/backlog work independent from current concurrent core-ability implementation.
+Implement Workspace only through its dedicated Issue #8 branch/PR. Keep the work independent from already-integrated core-ability history and reconcile against current `main` before integration.
 
 ## 17. Non-goals
 

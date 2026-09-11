@@ -1,6 +1,6 @@
 <?php
 /**
- * Uninstall cleanup for WP Native Builder Bridge v0.1-owned settings.
+ * Uninstall cleanup for WP Native Builder Bridge-owned settings and OAuth metadata.
  *
  * @package WP_Native_Builder_Bridge
  */
@@ -10,13 +10,14 @@ if ( ! defined( 'WP_UNINSTALL_PLUGIN' ) ) {
 }
 
 /**
- * Deletes only the v0.1 options owned by this plugin.
+ * Deletes only disposable Bridge settings, activity, and OAuth metadata.
  *
  * Removing the OAuth installation identity invalidates every outstanding
  * consent/code/access/refresh artifact. The fixed ChatGPT metadata/JWKS caches,
  * short-lived client-assertion replay claims, and their cleanup events are also
- * removed. Persistent Workspace data is a post-v0.1 concern and must not be added
- * to this cleanup without its separate explicit uninstall-retention contract.
+ * removed. Persistent Workspace documents/tasks are intentionally preserved on
+ * uninstall. Their explicit destructive lifecycle is WP Native Builder -> Settings
+ * -> Clear Workspace, which requires administrator/destructive authorization.
  *
  * @return void
  */

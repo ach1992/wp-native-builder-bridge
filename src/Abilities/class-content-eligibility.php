@@ -21,7 +21,7 @@ final class Content_Eligibility {
 	 * @return object|null Eligible post-type object, or null.
 	 */
 	public static function post_type_object( $type ) {
-		if ( ! is_string( $type ) || '' === $type || 'attachment' === $type ) {
+		if ( ! is_string( $type ) || '' === $type || 'attachment' === $type || self::is_workspace_internal_type( $type ) ) {
 			return null;
 		}
 
@@ -40,6 +40,20 @@ final class Content_Eligibility {
 			&& post_type_supports( $type, 'editor' );
 
 		return ( $content_facing || $rest_editor ) ? $obj : null;
+	}
+
+	/**
+	 * Identifies Bridge-owned private Workspace object types.
+	 *
+	 * Keep this explicit defense-in-depth boundary independent from WordPress
+	 * registration flags so future registration changes cannot accidentally make
+	 * Workspace memory generic site content.
+	 *
+	 * @param string $type Post type name.
+	 * @return bool
+	 */
+	public static function is_workspace_internal_type( $type ) {
+		return in_array( $type, array( 'wpnb_doc', 'wpnb_task' ), true );
 	}
 
 	/**

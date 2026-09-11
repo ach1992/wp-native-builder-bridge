@@ -11,6 +11,7 @@ use WP_Native_Builder_Bridge\Support\Environment;
 use WP_Native_Builder_Bridge\Support\Mutation_Log;
 use WP_Native_Builder_Bridge\Support\Permissions;
 use WP_Native_Builder_Bridge\Support\Settings;
+use WP_Native_Builder_Bridge\Workspace\Store;
 
 /**
  * Registers bridge ability categories and providers.
@@ -100,6 +101,8 @@ final class Registrar {
 	private $gravity_forms_abilities;
 	/** @var Code_Snippets_Abilities */
 	private $code_snippets_abilities;
+	/** @var Workspace_Abilities */
+	private $workspace_abilities;
 
 	/**
 	 * Creates the registrar.
@@ -107,8 +110,9 @@ final class Registrar {
 	 * @param Environment $environment Runtime dependency inspector.
 	 * @param Settings    $settings    Bridge settings service.
 	 * @param Permissions $permissions Ability permission service.
+	 * @param Store|null  $workspace   Optional shared Workspace store.
 	 */
-	public function __construct( Environment $environment, Settings $settings, Permissions $permissions ) {
+	public function __construct( Environment $environment, Settings $settings, Permissions $permissions, ?Store $workspace = null ) {
 		$this->environment             = $environment;
 		$this->settings                = $settings;
 		$this->permissions             = $permissions;
@@ -126,6 +130,7 @@ final class Registrar {
 		$this->user_abilities          = new User_Abilities( $this->permissions, $mutation_log );
 		$this->gravity_forms_abilities = new Gravity_Forms_Abilities( $this->permissions, $mutation_log );
 		$this->code_snippets_abilities = new Code_Snippets_Abilities( $this->permissions, $mutation_log );
+		$this->workspace_abilities     = new Workspace_Abilities( $this->permissions, $workspace ? $workspace : new Store(), $mutation_log );
 	}
 
 	/**
@@ -217,6 +222,7 @@ final class Registrar {
 		$this->user_abilities->register();
 		$this->gravity_forms_abilities->register();
 		$this->code_snippets_abilities->register();
+		$this->workspace_abilities->register();
 	}
 
 	/**

@@ -46,6 +46,9 @@ echo "MCP tools/list: PASS"
 run_mcp '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"mcp-adapter-discover-abilities","arguments":{}}}'
 grep -Fq 'wp-native-builder/bridge-info' "$output_file"
 grep -Fq 'wp-native-builder/content-upsert' "$output_file"
+grep -Fq 'wp-native-builder/workspace-resume' "$output_file"
+grep -Fq 'wp-native-builder/workspace-document' "$output_file"
+grep -Fq 'wp-native-builder/workspace-task' "$output_file"
 
 run_mcp '{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"mcp-adapter-get-ability-info","arguments":{"ability_name":"wp-native-builder/bridge-info"}}}'
 jq -e '.result.structuredContent.name == "wp-native-builder/bridge-info"' "$output_file" >/dev/null
@@ -53,7 +56,10 @@ jq -e '.result.structuredContent.name == "wp-native-builder/bridge-info"' "$outp
 run_mcp '{"jsonrpc":"2.0","id":4,"method":"tools/call","params":{"name":"mcp-adapter-execute-ability","arguments":{"ability_name":"wp-native-builder/bridge-info","parameters":{}}}}'
 jq -e '.result.structuredContent.success == true' "$output_file" >/dev/null
 
-echo "MCP discover/get-info/read: PASS"
+run_mcp '{"jsonrpc":"2.0","id":41,"method":"tools/call","params":{"name":"mcp-adapter-execute-ability","arguments":{"ability_name":"wp-native-builder/workspace-resume","parameters":{}}}}'
+jq -e '.result.structuredContent.success == true and (.result.structuredContent.data.counts | type == "object")' "$output_file" >/dev/null
+
+echo "MCP discover/get-info/read + Workspace resume: PASS"
 
 run_mcp '{"jsonrpc":"2.0","id":5,"method":"tools/call","params":{"name":"mcp-adapter-execute-ability","arguments":{"ability_name":"wp-native-builder/content-upsert","parameters":{"action":"create","post_type":"post","title":"WPNB MCP CI draft","content":"<!-- wp:paragraph --><p>Initial MCP CI content</p><!-- /wp:paragraph -->","status":"draft"}}}}'
 post_id="$(jq -r '.result.structuredContent.data.id' "$output_file")"
