@@ -67,6 +67,14 @@ When future development changes durable product behavior or architecture:
 - preserve important superseded design material under `reference/` only when it contains future-useful rationale that is no longer represented by a stronger current source;
 - keep public README content focused on the plugin and normal usage.
 
+## Branch lifecycle and recovery rule
+
+- `main` is the only long-lived development branch for this repository unless a future accepted workflow explicitly establishes another long-lived branch.
+- Feature, fix, release-preparation, and other topic branches are temporary. After their work is merged, the target is verified, and no open PR or independent work still depends on the branch, delete the topic branch.
+- Do not infer active work merely from a leftover branch name. Recover active work from open GitHub Issues/PRs, current target refs, and CI first; use branch history only as supporting implementation evidence.
+- Preserve history through Git commits, merged PRs, immutable release tags, and GitHub Releases rather than by retaining merged topic branches.
+- A replacement Master should be able to start from `main`, this recovery map, current GitHub control-plane state, and the latest relevant release without access to any previous chat.
+
 ## Repository boundary
 
 This repository owns the WordPress Bridge plugin. The companion `ach1992/wp-native-builder` repository is separate. Cross-repository reads may be useful for interface compatibility, but this repository's recovery must remain possible from its own canonical specification, code/docs, and GitHub control plane.
