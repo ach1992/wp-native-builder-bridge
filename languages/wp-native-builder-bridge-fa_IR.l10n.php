@@ -8,7 +8,7 @@ $messages = array_merge(
 );
 
 return array(
-	'project-id-version' => 'WP Native Builder Bridge 0.1.1',
+	'project-id-version' => 'WP Native Builder Bridge 0.1.2',
 	'language'           => 'fa_IR',
 	'messages'           => $messages,
 );

@@ -113,7 +113,7 @@ final class Gravity_Forms_Abilities {
 	}
 
 	/** @return bool */ public function can_read() {
-		return $this->permissions->allowed( Settings::GROUP_SITE_READ, 'gravityforms_view_forms' ); }
+		return $this->permissions->allowed( Settings::GROUP_SITE_READ, 'gravityforms_edit_forms' ); }
 	/** @param array<string,mixed> $input Input. @return bool */
 	public function can_upsert( $input ) {
 		return is_array( $input ) && isset( $input['action'] ) && $this->permissions->allowed( Settings::GROUP_BUILDER_WRITE, 'create' === $input['action'] ? 'gravityforms_create_form' : 'gravityforms_edit_forms' ); }

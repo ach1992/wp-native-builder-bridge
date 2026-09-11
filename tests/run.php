@@ -94,7 +94,7 @@ wpnb_assert( true === $ability['meta']['mcp']['public'], 'Bridge discovery abili
 wpnb_assert( true === $ability['meta']['annotations']['readonly'], 'Bridge discovery ability is marked read-only.' );
 wpnb_assert( true === call_user_func( $ability['permission_callback'] ), 'Bridge discovery ability permission callback honors Site Read.' );
 $bridge_info = call_user_func( $ability['execute_callback'] );
-wpnb_assert( '0.1.1' === $bridge_info['plugin_version'], 'Bridge discovery ability returns plugin version.' );
+wpnb_assert( '0.1.2' === $bridge_info['plugin_version'], 'Bridge discovery ability returns plugin version.' );
 wpnb_assert( true === $bridge_info['mcp_adapter']['available'], 'Bridge discovery ability reports adapter availability.' );
 
 wpnb_test_reset_state();
@@ -283,15 +283,27 @@ wpnb_assert( isset( $GLOBALS['wpnb_test']['registered_abilities']['wp-native-bui
 wpnb_assert( isset( $GLOBALS['wpnb_test']['registered_abilities']['wp-native-builder/gravity-form-upsert'] ), 'GFAPI fallback includes form creation/update.' );
 wpnb_assert( isset( $GLOBALS['wpnb_test']['registered_abilities']['wp-native-builder/gravity-form-status'] ), 'GFAPI fallback includes form activation state.' );
 wpnb_assert( isset( $GLOBALS['wpnb_test']['registered_abilities']['wp-native-builder/gravity-form-delete'] ), 'GFAPI fallback includes gated form deletion.' );
+$gf_read = $GLOBALS['wpnb_test']['registered_abilities']['wp-native-builder/gravity-forms-read'];
+$GLOBALS['wpnb_test']['capabilities']['gravityforms_edit_forms'] = true;
+wpnb_assert( true === call_user_func( $gf_read['permission_callback'] ), 'GFAPI fallback form reads use the supported gravityforms_edit_forms capability.' );
+unset( $GLOBALS['wpnb_test']['capabilities']['gravityforms_edit_forms'] );
+wpnb_assert( false === call_user_func( $gf_read['permission_callback'] ), 'A user without gravityforms_edit_forms is denied GFAPI fallback form reads.' );
+$GLOBALS['wpnb_test']['capabilities']['gravityforms_view_forms'] = true;
+wpnb_assert( false === call_user_func( $gf_read['permission_callback'] ), 'An invented gravityforms_view_forms capability does not authorize GFAPI fallback form reads.' );
+unset( $GLOBALS['wpnb_test']['capabilities']['gravityforms_view_forms'] );
+$GLOBALS['wpnb_test']['capabilities']['gravityforms_edit_forms'] = true;
 $gf_upsert = $GLOBALS['wpnb_test']['registered_abilities']['wp-native-builder/gravity-form-upsert'];
 $gf_created = call_user_func( $gf_upsert['execute_callback'], array( 'action' => 'create', 'form' => array( 'title' => 'Provider contract fixture', 'description' => 'Fast GFAPI fallback coverage', 'fields' => array() ) ) );
 wpnb_assert( ! is_wp_error( $gf_created ) && 1 === $gf_created['form']['id'], 'GFAPI fallback creates and reads back a form without private storage access.' );
+$gf_list = call_user_func( $gf_read['execute_callback'], array( 'action' => 'list' ) );
+wpnb_assert( ! is_wp_error( $gf_list ) && 1 === count( $gf_list['items'] ) && 'Provider contract fixture' === $gf_list['items'][0]['title'], 'Authorized GFAPI fallback form reads list forms through the documented provider API.' );
 $gf_status = $GLOBALS['wpnb_test']['registered_abilities']['wp-native-builder/gravity-form-status'];
 $gf_activated = call_user_func( $gf_status['execute_callback'], array( 'id' => 1, 'active' => true ) );
 wpnb_assert( ! is_wp_error( $gf_activated ) && true === $gf_activated['form']['active'], 'GFAPI fallback updates form activation state.' );
 $gf_delete = $GLOBALS['wpnb_test']['registered_abilities']['wp-native-builder/gravity-form-delete'];
 $gf_deleted = call_user_func( $gf_delete['execute_callback'], array( 'id' => 1 ) );
 wpnb_assert( ! is_wp_error( $gf_deleted ) && true === $gf_deleted['deleted'], 'GFAPI fallback deletes through GFAPI rather than provider storage internals.' );
+unset( $GLOBALS['wpnb_test']['capabilities']['gravityforms_edit_forms'] );
 
 // A current public native Gravity Forms Ability must suppress the Bridge GFAPI duplicate.
 $GLOBALS['wpnb_test']['abilities']['gravityforms/forms-get'] = wpnb_test_ability( 'gravityforms/forms-get', array( 'id' => array( 'type' => 'integer' ) ), array( 'public' => true ), 'gravityforms' );

@@ -94,6 +94,8 @@ Plugin/theme installation is deliberately narrower: it accepts WordPress.org slu
 
 ## Optional integrations
 
+Integration is discovery-first: provider-owned public WordPress Abilities are reused at runtime, so a compatible new plugin or theme should normally require no Bridge-specific code. Provider fallbacks are reserved for bounded gaps with documented public APIs. See [Architecture](./docs/ARCHITECTURE.md#discovery-first-provider-architecture).
+
 - **Astra / Astra Pro:** enable Astra's **Abilities** setting. A separate Astra MCP server is not required for this Bridge setup.
 - **Code Snippets:** compatible provider APIs are used for managed snippet lifecycle; the Bridge does not directly evaluate submitted code.
 - **Gravity Forms:** native provider Abilities are preferred; otherwise the bounded GFAPI fallback is used when available.
