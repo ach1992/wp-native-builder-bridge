@@ -13,6 +13,7 @@ mkdir -p "$plugin_dir"
 cp "$root/wp-native-builder-bridge.php" "$plugin_dir/"
 cp "$root/uninstall.php" "$plugin_dir/"
 cp "$root/README.md" "$plugin_dir/"
+cp "$root/CHANGELOG.md" "$plugin_dir/"
 cp "$root/LICENSE" "$plugin_dir/"
 cp -R "$root/src" "$plugin_dir/src"
 cp -R "$root/languages" "$plugin_dir/languages"
@@ -50,6 +51,7 @@ required=(
     "wp-native-builder-bridge/wp-native-builder-bridge.php"
     "wp-native-builder-bridge/uninstall.php"
     "wp-native-builder-bridge/LICENSE"
+    "wp-native-builder-bridge/CHANGELOG.md"
     "wp-native-builder-bridge/languages/wp-native-builder-bridge-fa_IR.l10n.php"
     "wp-native-builder-bridge/src/class-plugin.php"
 )
@@ -68,7 +70,7 @@ for path in "${required[@]}"; do
 done
 
 for entry in "${entries[@]}"; do
-    if [[ "$entry" =~ (^|/)(\.git|\.github|tests|vendor|node_modules|build|composer\.(json|lock)|MASTER-SPEC\.md)(/|$) ]]; then
+    if [[ "$entry" =~ (^|/)(\.git|\.github|tests|vendor|node_modules|build|composer\.(json|lock))(/|$) ]]; then
         echo "ERROR: release ZIP contains development-only files." >&2
         exit 1
     fi

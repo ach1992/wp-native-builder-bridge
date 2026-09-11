@@ -1,6 +1,6 @@
 {
   "name": "ach1992/wp-native-builder-bridge",
-  "description": "Development quality tooling for WP Native Builder Bridge.",
+  "description": "WordPress bridge for direct ChatGPT OAuth/MCP access to permission-checked WordPress Abilities.",
   "type": "wordpress-plugin",
   "license": "GPL-2.0-or-later",
   "require-dev": {
@@ -32,5 +32,12 @@
       "@build"
     ],
     "safety": "bash bin/static-safety-check.sh"
-  }
+  },
+  "homepage": "https://github.com/ach1992/wp-native-builder-bridge",
+  "authors": [
+    {
+      "name": "ACh",
+      "homepage": "https://ach.li"
+    }
+  ]
 }
