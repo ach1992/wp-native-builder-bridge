@@ -4,7 +4,10 @@
  * Description: Exposes typed, permission-checked WordPress abilities for AI-assisted site building.
  * Version: 0.1.0-dev
  * Requires at least: 6.9
+ * License: GPL v2 or later
+ * License URI: https://www.gnu.org/licenses/gpl-2.0.html
  * Text Domain: wp-native-builder-bridge
+ * Domain Path: /languages
  *
  * @package WP_Native_Builder_Bridge
  */
@@ -27,7 +30,7 @@ spl_autoload_register(
 
 		$relative   = substr( $class_name, strlen( $prefix ) );
 		$parts      = explode( '\\', $relative );
-		$class_file = 'class-' . strtolower( str_replace( '_', '-', array_pop( $parts ) ) ) . '.php';
+		$class_file = 'class-' . strtolower( str_replace( '_', '-', array_pop( $parts ) ) . '.php';
 		$directory  = $parts ? implode( '/', $parts ) . '/' : '';
 		$path       = WP_NATIVE_BUILDER_BRIDGE_DIR . '/src/' . $directory . $class_file;
 
