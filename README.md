@@ -86,6 +86,12 @@ Only Site Read is enabled by default. OAuth transport authorization identifies t
 
 A future compatible transport may replace MCP Adapter if evidence shows that is a better supported path, but the normal architecture should use one transport rather than stacking overlapping MCP server plugins.
 
+## Localization
+
+The plugin uses the WordPress text domain `wp-native-builder-bridge` and keeps user-facing strings translation-ready through WordPress gettext APIs. Bundled locale catalogs live under `languages/`; v0.1 ships a complete Persian (`fa_IR`) runtime catalog using WordPress's `.l10n.php` format. Additional locales can be added without changing the plugin's ability contracts or transport architecture.
+
+Localization is validated both statically and in a real WordPress runtime. Future admin surfaces, including the post-v0.1 Workspace UI, must preserve translation readiness and RTL/LTR neutrality.
+
 ## Post-v0.1 Persistent Workspace
 
 The accepted follow-on architecture adds a small WordPress-hosted Persistent Workspace so fresh companion-Skill chats can resume durable site-project context without receiving old chat history. This capability is **not implemented in v0.1 and does not block the v0.1 release path**.
@@ -147,7 +153,7 @@ composer install
 composer check
 ```
 
-`composer check` runs PHP syntax checks, the dependency-free test suite, `WordPress-Core` plus `PHPCompatibilityWP` checks for the current PHP 8.4+ development baseline, the static safety-surface audit, and the installable ZIP validator. The resulting local package is `build/wp-native-builder-bridge.zip`. Composer and these quality tools are development dependencies only; they are not shipped in or required by the production plugin.
+`composer check` runs strict Composer package validation, PHP syntax checks, the dependency-free test suite, `WordPress-Core` plus `PHPCompatibilityWP` checks for the current PHP 8.4+ development baseline, Persian source/runtime catalog validation, the static safety-surface audit, and the installable ZIP validator. The resulting local package is `build/wp-native-builder-bridge.zip`. Composer and these quality tools are development dependencies only; they are not shipped in or required by the production plugin.
 
 The repository also contains a disposable Docker integration runner that builds the release ZIP, installs that ZIP into WordPress, installs the pinned official MCP Adapter `v0.6.1`, and then runs integration-only tests in isolated volumes:
 
@@ -157,9 +163,9 @@ bash bin/run-integration.sh php8.4-apache
 RUN_OPTIONAL_PROVIDERS=1 bash bin/run-integration.sh php8.4-apache
 ```
 
-The Issue #6 integration lane exercises the Adapter's default HTTP session contract, the Bridge direct OAuth endpoint (PKCE, resource binding, Bearer validation, refresh rotation, revocation, direct MCP initialize), and the raw STDIO MCP discovery/execution workflow for local/non-ChatGPT clients.
+The Issue #6 integration lane exercises the Adapter's default HTTP session contract, the Bridge direct OAuth endpoint (PKCE, resource binding, Bearer validation, refresh rotation, revocation, direct MCP initialize), the bundled Persian runtime catalog, and the raw STDIO MCP discovery/execution workflow for local/non-ChatGPT clients.
 
-The optional-provider lane installs the explicitly tested Code Snippets `3.10.2` and Astra `4.13.11` fixtures inside the disposable environment. Gravity Forms is represented in automated transport tests by an explicitly test-only GFAPI contract fixture; this is not a claim that the commercial binary is present. GitHub Actions runs the same quality and integration gates on pull requests and `main`.
+The optional-provider lane installs and exercises the explicitly tested Code Snippets `3.9.6` and `3.10.2` provider generations plus Astra `4.13.11`. Gravity Forms is represented in automated transport tests by an explicitly test-only GFAPI contract fixture; this is not a claim that the commercial binary is present. GitHub Actions runs the same quality and integration gates on pull requests and `main`.
 
 Disposable WordPress environments with the official MCP Adapter can also run individual integration checks through WP-CLI:
 
@@ -172,6 +178,7 @@ wp eval-file tests/integration/issue4-core-admin-smoke.php --user=<administrator
 wp eval-file tests/integration/issue5-hardening-smoke.php --user=<administrator>
 wp eval-file tests/integration/issue6-http-transport-smoke.php --user=<administrator>
 wp eval-file tests/integration/issue6-direct-oauth-smoke.php --user=<administrator>
+wp eval-file tests/integration/issue6-i18n-smoke.php --user=<administrator>
 ```
 
 Optional provider fixtures have focused checks in `tests/integration/issue4-code-snippets-smoke.php` and `tests/integration/issue4-astra-reuse-smoke.php`. They are designed for disposable environments and skip cleanly when the relevant provider is unavailable. Astra's native Ability test assumes Astra is active and its own Abilities toggle is enabled; the Bridge never enables that setting itself.
