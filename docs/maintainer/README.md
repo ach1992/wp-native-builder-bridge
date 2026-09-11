@@ -36,18 +36,24 @@ A future Master should not reconstruct live status from old reference documents.
 
 ## Preserved v0.1 reference set
 
-The v0.1.1 public-documentation cleanup replaced or removed several detailed documents. Their exact pre-cleanup contents are preserved under `reference/v0.1-pre-release/` so architectural reasoning and detailed contracts are not lost.
+The v0.1.1 public-documentation cleanup replaced or removed several detailed documents. Their exact pre-cleanup contents and original relative layout are preserved under `reference/v0.1-pre-release/` so architectural reasoning, internal links, and detailed contracts are not lost.
 
-Preserved files:
+Preserved layout:
 
-- `MASTER-SPEC.md` — the complete 607-line pre-release Master Specification.
-- `ABILITY-INVENTORY.md` — the v0.1 Bridge-owned Ability/safety inventory.
-- `CORE-ABILITY-SAFETY-BOUNDARIES.md` — detailed generic-content, block, stale-write, destructive, and navigation boundaries.
-- `INSTALLATION-AND-CONNECTION.md` — the detailed original connection/OAuth installation guide.
-- `OPTIONAL-INTEGRATIONS-AND-ADMIN.md` — provider-resolution and advanced-administration notes.
-- `PROJECT-WORKSPACE-ARCHITECTURE.md` — detailed Persistent Workspace architecture and lifecycle design.
-- `RELEASE-CHECKLIST.md` — the original v0.1 release gate checklist.
-- `TROUBLESHOOTING.md` — the longer original troubleshooting guide.
+```text
+reference/v0.1-pre-release/
+├── MASTER-SPEC.md
+└── docs/
+    ├── ABILITY-INVENTORY.md
+    ├── CORE-ABILITY-SAFETY-BOUNDARIES.md
+    ├── INSTALLATION-AND-CONNECTION.md
+    ├── OPTIONAL-INTEGRATIONS-AND-ADMIN.md
+    ├── PROJECT-WORKSPACE-ARCHITECTURE.md
+    ├── RELEASE-CHECKLIST.md
+    └── TROUBLESHOOTING.md
+```
+
+`MASTER-SPEC.md` is the complete 607-line pre-release Master Specification. The files under the snapshot's `docs/` directory are the exact detailed documents that existed immediately before the public-documentation cleanup.
 
 These snapshots are reference evidence, not current live contracts. When they conflict with current code, current durable docs, active GitHub Issues/PRs, CI, or release state, use the current authoritative source.
 
