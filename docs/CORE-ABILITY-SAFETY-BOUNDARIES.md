@@ -21,7 +21,7 @@ Generic WordPress coverage should remain broad without treating every registered
 - A representative non-public `show_ui=true` administrative CPT without editor support must be rejected.
 - A representative genuinely content-facing/editor-capable CPT must remain supported.
 
-This boundary is provider-neutral. WooCommerce order-like records and future Workspace-internal objects are examples of why broad `show_ui` eligibility is unsafe, not names to hardcode into a blacklist.
+This boundary is provider-neutral. WooCommerce order-like records and Workspace-internal objects are examples of why broad `show_ui` eligibility is unsafe, not names to hardcode into a blacklist.
 
 ## 2. Gutenberg/block eligibility
 
@@ -91,7 +91,7 @@ Dedicated navigation operations and generic content operations have different co
 
 ## 7. Workspace relationship
 
-Post-v0.1 Workspace Issue #8 depends on this generic-content boundary being correct before private Workspace objects are introduced.
+Pre-release Workspace Issue #8 depends on this generic-content boundary being correct before private Workspace objects are exposed through their dedicated abilities.
 
 Workspace-internal objects must additionally be explicitly excluded from generic content/block abilities even if future registration details could otherwise satisfy a generic predicate. Workspace access is only through the dedicated typed Workspace contract.
 

@@ -35,7 +35,7 @@ The Bridge creates its ChatGPT-facing MCP route through the official Adapter's s
 
 ## Direct ChatGPT App
 
-After installation on an Internet-reachable WordPress site with valid HTTPS, **Settings -> WP Native Builder** displays the exact MCP URL to enter when creating the custom App:
+After installation on an Internet-reachable WordPress site with valid HTTPS, **WP Native Builder -> Settings** displays the exact MCP URL to enter when creating the custom App:
 
 ```text
 https://YOUR-SITE.example/wp-json/wp-native-builder/v1/mcp
@@ -52,15 +52,16 @@ See [`docs/INSTALLATION-AND-CONNECTION.md`](./docs/INSTALLATION-AND-CONNECTION.m
 - site/environment inspection;
 - posts, pages, supported custom post types, revisions, and statuses;
 - structured Gutenberg block inspection and targeted edits;
-- media, taxonomies, and navigation;
+- media inspection/upload/update/delete, taxonomies, and navigation;
 - Astra/Astra Pro integration where supported public interfaces exist;
 - Gravity Forms through its supported public API or suitable native Abilities when available;
 - Code Snippets Pro where a stable supported integration API/Ability can be verified, including managed PHP/CSS/JavaScript/HTML snippet lifecycle where supported;
 - site configuration;
-- plugin/theme lifecycle operations;
-- users/roles and destructive operations when explicitly enabled.
+- plugin/theme lifecycle operations, including WordPress.org slug-based installation;
+- users/roles and destructive operations when explicitly enabled;
+- persistent Workspace resume/documents/tasks with stale-write protection and administrator inspection/export/clear lifecycle.
 
-The bridge intentionally does **not** expose arbitrary PHP, SQL, shell/WP-CLI, unrestricted filesystem access, or credential retrieval. This does not prohibit managed PHP snippets: when the Code Snippets integration supports them, the bridge may create, update, activate, deactivate, and delete PHP snippets through the plugin's managed lifecycle instead of executing arbitrary PHP directly.
+The bridge intentionally does **not** expose arbitrary PHP, SQL, shell/WP-CLI, unrestricted filesystem access, credential retrieval, arbitrary plugin ZIP/package installation, or caller-selected server-path upload. `media-upload` is the bounded upload surface: it accepts base64 file bytes plus a filename, is capped by the smaller of the WordPress upload limit and 20 MiB, and hands the file to WordPress media handling. This does not prohibit managed PHP snippets: when the Code Snippets integration supports them, the bridge may create, update, activate, deactivate, and delete PHP snippets through the plugin's managed lifecycle instead of executing arbitrary PHP directly.
 
 ## Admin access model
 
@@ -90,15 +91,15 @@ A future compatible transport may replace MCP Adapter if evidence shows that is 
 
 The plugin uses the WordPress text domain `wp-native-builder-bridge` and keeps user-facing strings translation-ready through WordPress gettext APIs. Bundled locale catalogs live under `languages/`; v0.1 ships a complete Persian (`fa_IR`) runtime catalog using WordPress's `.l10n.php` format. Additional locales can be added without changing the plugin's ability contracts or transport architecture.
 
-Localization is validated both statically and in a real WordPress runtime. Future admin surfaces, including the post-v0.1 Workspace UI, must preserve translation readiness and RTL/LTR neutrality.
+Localization is validated both statically and in a real WordPress runtime. The Workspace/admin surfaces use the same text domain and remain RTL/LTR neutral.
 
-## Post-v0.1 Persistent Workspace
+## Persistent Workspace
 
-The accepted follow-on architecture adds a small WordPress-hosted Persistent Workspace so fresh companion-Skill chats can resume durable site-project context without receiving old chat history. This capability is **not implemented in v0.1 and does not block the v0.1 release path**.
+The first public release includes a small WordPress-hosted Persistent Workspace so fresh companion-Skill chats can resume durable site-project context without receiving old chat history. It uses dedicated `workspace-resume`, `workspace-document`, and `workspace-task` abilities plus a top-level WordPress administration area.
 
-Workspace uses private WordPress-native storage, dedicated typed abilities, explicit isolation from generic content/Gutenberg operations, and optimistic concurrency that does not depend on WordPress revision rows surviving. WordPress revisions may remain optional history; any required history that must survive ordinary revision pruning is owned by bounded Bridge-managed Workspace version/snapshot storage instead.
+Workspace uses private WordPress-native storage, dedicated typed abilities, explicit isolation from generic content/Gutenberg operations, and optimistic concurrency that does not depend on WordPress revision rows surviving. The first release does not expose a rollback/history feature; if durable rollback is added later, it must use bounded Bridge-managed history rather than silently depending on WordPress revision rows.
 
-See [`docs/PROJECT-WORKSPACE-ARCHITECTURE.md`](./docs/PROJECT-WORKSPACE-ARCHITECTURE.md) and Issue #8 for the accepted Bridge-side contract and future implementation work.
+See [`docs/PROJECT-WORKSPACE-ARCHITECTURE.md`](./docs/PROJECT-WORKSPACE-ARCHITECTURE.md) and Issue #8 for the Bridge-side storage, concurrency, lifecycle, and validation contract.
 
 ## Project map
 
@@ -111,14 +112,14 @@ See [`docs/PROJECT-WORKSPACE-ARCHITECTURE.md`](./docs/PROJECT-WORKSPACE-ARCHITEC
 | [`docs/INSTALLATION-AND-CONNECTION.md`](./docs/INSTALLATION-AND-CONNECTION.md) | v0.1 installation, direct ChatGPT Workspace App OAuth connection, update/rollback, and uninstall behavior |
 | [`docs/TROUBLESHOOTING.md`](./docs/TROUBLESHOOTING.md) | Layered troubleshooting for direct MCP/OAuth, permissions, providers, stale writes, and local validation |
 | [`docs/RELEASE-CHECKLIST.md`](./docs/RELEASE-CHECKLIST.md) | Automated, OAuth/security, real-ChatGPT, metadata, license, and publication gates for v0.1 |
-| [`docs/PROJECT-WORKSPACE-ARCHITECTURE.md`](./docs/PROJECT-WORKSPACE-ARCHITECTURE.md) | Accepted post-v0.1 Workspace storage, isolation, versioning, admin UX, and lifecycle architecture |
+| [`docs/PROJECT-WORKSPACE-ARCHITECTURE.md`](./docs/PROJECT-WORKSPACE-ARCHITECTURE.md) | Persistent Workspace storage, isolation, versioning, admin UX, and lifecycle architecture |
 | [Issue #1](https://github.com/ach1992/wp-native-builder-bridge/issues/1) | v0.1 program/outcome |
 | [Issue #2](https://github.com/ach1992/wp-native-builder-bridge/issues/2) | Plugin/MCP foundation and access controls |
 | [Issue #3](https://github.com/ach1992/wp-native-builder-bridge/issues/3) | Core WordPress/Gutenberg/media/navigation abilities and live implementation acceptance |
 | [Issue #4](https://github.com/ach1992/wp-native-builder-bridge/issues/4) | Astra/Gravity Forms/Code Snippets/advanced admin abilities |
 | [Issue #5](https://github.com/ach1992/wp-native-builder-bridge/issues/5) | Ability hardening, tests, and CI |
 | [Issue #6](https://github.com/ach1992/wp-native-builder-bridge/issues/6) | Direct ChatGPT App interoperability, docs, and v0.1 release |
-| [Issue #8](https://github.com/ach1992/wp-native-builder-bridge/issues/8) | Post-v0.1 Persistent Workspace implementation and Bridge-local validation |
+| [Issue #8](https://github.com/ach1992/wp-native-builder-bridge/issues/8) | Pre-release Persistent Workspace implementation and Bridge-local validation |
 | [`wp-native-builder`](https://github.com/ach1992/wp-native-builder) | Companion ChatGPT Skill |
 
 ## Development path
@@ -128,10 +129,9 @@ See [`docs/PROJECT-WORKSPACE-ARCHITECTURE.md`](./docs/PROJECT-WORKSPACE-ARCHITEC
   -> #3 ability reuse + core site-building abilities
   -> #4 optional integrations + advanced admin
   -> #5 contract/permission hardening + CI
-  -> #6 direct ChatGPT App OAuth + real interoperability + v0.1 release
-
-post-v0.1:
+  -> #6 direct ChatGPT App OAuth + real interoperability + release preparation
   -> #8 persistent Workspace storage + abilities + admin UX
+  -> #6 final exact-current validation + public v0.1 release gate
 ```
 
 This sequence is intentionally small. Implementation should add abstractions only when repeated code or a real interoperability requirement earns the complexity.
@@ -163,7 +163,7 @@ bash bin/run-integration.sh php8.4-apache
 RUN_OPTIONAL_PROVIDERS=1 bash bin/run-integration.sh php8.4-apache
 ```
 
-The Issue #6 integration lane exercises the Adapter's default HTTP session contract, the Bridge direct OAuth endpoint (PKCE, resource binding, Bearer validation, refresh rotation, revocation, direct MCP initialize), the bundled Persian runtime catalog, and the raw STDIO MCP discovery/execution workflow for local/non-ChatGPT clients.
+The integration lanes exercise the Adapter's default HTTP session contract, the Bridge direct OAuth endpoint (PKCE, resource binding, Bearer validation, refresh rotation, revocation, direct MCP initialize), the bundled Persian runtime catalog, raw STDIO MCP discovery/execution, Persistent Workspace isolation/concurrency/admin UX, and Workspace preservation across deactivate/uninstall.
 
 The optional-provider lane installs and exercises the explicitly tested Code Snippets `3.9.6` and `3.10.2` provider generations plus Astra `4.13.11`. Gravity Forms is represented in automated transport tests by an explicitly test-only GFAPI contract fixture; this is not a claim that the commercial binary is present. GitHub Actions runs the same quality and integration gates on pull requests and `main`.
 
@@ -179,6 +179,7 @@ wp eval-file tests/integration/issue5-hardening-smoke.php --user=<administrator>
 wp eval-file tests/integration/issue6-http-transport-smoke.php --user=<administrator>
 wp eval-file tests/integration/issue6-direct-oauth-smoke.php --user=<administrator>
 wp eval-file tests/integration/issue6-i18n-smoke.php --user=<administrator>
+wp eval-file tests/integration/issue8-workspace-smoke.php --user=<administrator>
 ```
 
 Optional provider fixtures have focused checks in `tests/integration/issue4-code-snippets-smoke.php` and `tests/integration/issue4-astra-reuse-smoke.php`. They are designed for disposable environments and skip cleanly when the relevant provider is unavailable. Astra's native Ability test assumes Astra is active and its own Abilities toggle is enabled; the Bridge never enables that setting itself.

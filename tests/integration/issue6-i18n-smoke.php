@@ -40,6 +40,18 @@ wpnb_issue6_i18n_assert(
 	'خطای احراز مجوز OAuth' === __( 'OAuth authorization error', $domain ),
 	'Persian OAuth error heading did not load at runtime.'
 );
+wpnb_issue6_i18n_assert(
+	'پیشخوان' === __( 'Dashboard', $domain ),
+	'Persian Workspace dashboard label did not load at runtime.'
+);
+wpnb_issue6_i18n_assert(
+	'چرخهٔ عمر داده‌های فضای کاری' === __( 'Workspace data lifecycle', $domain ),
+	'Persian Workspace lifecycle label did not load at runtime.'
+);
+wpnb_issue6_i18n_assert(
+	'در حال انجام' === __( 'In progress', $domain ),
+	'Persian Workspace task-state label did not load at runtime.'
+);
 
 unload_textdomain( $domain );
 

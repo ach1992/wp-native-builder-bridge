@@ -28,7 +28,7 @@ This is the release gate for Issue #6. Do not publish/tag merely because impleme
 - [ ] real Code Snippets 3.10.2 provider lane passes.
 - [ ] real Astra 4.13.11 native Ability reuse lane passes.
 - [ ] Gravity Forms GFAPI transport contract fixture passes and is explicitly reported as a contract fixture, not commercial-binary validation.
-- [ ] release uninstall removes Bridge v0.1 settings/mutation metadata, OAuth installation identity, CIMD/JWKS caches, client-assertion replay claims/cleanup events, and does not delete site/provider content.
+- [ ] release uninstall removes Bridge settings/mutation metadata, OAuth installation identity, CIMD/JWKS caches, and client-assertion replay claims/cleanup events while preserving Workspace documents/tasks and normal site/provider content.
 - [ ] CI is green on the exact release candidate SHA.
 - [ ] release ZIP artifact can be downloaded and its digest recorded.
 
@@ -72,6 +72,22 @@ This is the release gate for Issue #6. Do not publish/tag merely because impleme
 - [ ] localization files are included in the installable ZIP and no translation build tooling is required at runtime.
 - [ ] UI remains RTL/LTR neutral; no release-specific layout assumes an LTR locale.
 
+## Persistent Workspace and admin UX gate
+
+- [ ] private `wpnb_doc` / `wpnb_task` storage has no public query, REST, search, navigation, or ordinary editor surface.
+- [ ] generic content and Gutenberg/block abilities explicitly reject Workspace internal object types.
+- [ ] `workspace-resume`, `workspace-document`, and `workspace-task` are discoverable through the same MCP Adapter surface.
+- [ ] Workspace document/task CRUD, archive/transition, permissions, and deterministic errors pass in real WordPress.
+- [ ] overwrite-sensitive writes require `expected_version` plus `expected_state_hash` and reject stale state before mutation.
+- [ ] current Workspace state and stale-write identity remain valid without WordPress revisions.
+- [ ] `workspace-resume` remains compact and does not dump document bodies, task notes, transcripts, or history.
+- [ ] top-level `WP Native Builder` navigation contains Dashboard, Documents, Tasks, Activity, and Settings.
+- [ ] admin inspection/filtering, JSON export, and explicit destructive Clear Workspace paths pass.
+- [ ] deactivation preserves Workspace data.
+- [ ] uninstall preserves Workspace data by default; deletion is performed only through the explicit clear path.
+- [ ] new Workspace/admin strings are covered by the bundled Persian catalog and representative runtime checks.
+- [ ] existing OAuth, media upload, extension lifecycle, provider reuse, and safety regressions remain green.
+
 ## Release metadata gate
 
 Before final v0.1.0 packaging:
@@ -87,4 +103,4 @@ Before final v0.1.0 packaging:
 
 ## Post-release
 
-Issue #8 Persistent Workspace remains a separate post-v0.1 project. It must not retroactively expand this release gate or cause current v0.1 uninstall logic to silently delete future Workspace data.
+Issue #8 is part of the first-public-release gate per the owner scope revision of 2026-09-11. After release, future Workspace expansion remains subject to the same compact-storage, explicit-lifecycle, and no-arbitrary-secret/filesystem boundaries.

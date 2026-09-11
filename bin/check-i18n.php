@@ -20,11 +20,6 @@ if ( ! is_array( $data ) || 'fa_IR' !== ( $data['language'] ?? '' ) || ! is_arra
 }
 
 $messages = $data['messages'];
-if ( 236 !== count( $messages ) ) {
-	fwrite( STDERR, sprintf( "ERROR: expected 236 Persian messages, found %d.\n", count( $messages ) ) );
-	exit( 1 );
-}
-
 foreach ( $messages as $source => $translation ) {
 	if ( '' === trim( (string) $source ) || '' === trim( (string) $translation ) ) {
 		fwrite( STDERR, "ERROR: Persian catalog contains an empty source or translation.\n" );

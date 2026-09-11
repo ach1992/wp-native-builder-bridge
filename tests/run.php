@@ -94,7 +94,7 @@ wpnb_assert( true === $ability['meta']['mcp']['public'], 'Bridge discovery abili
 wpnb_assert( true === $ability['meta']['annotations']['readonly'], 'Bridge discovery ability is marked read-only.' );
 wpnb_assert( true === call_user_func( $ability['permission_callback'] ), 'Bridge discovery ability permission callback honors Site Read.' );
 $bridge_info = call_user_func( $ability['execute_callback'] );
-wpnb_assert( '0.1.0-dev' === $bridge_info['plugin_version'], 'Bridge discovery ability returns plugin version.' );
+wpnb_assert( '0.1.0' === $bridge_info['plugin_version'], 'Bridge discovery ability returns plugin version.' );
 wpnb_assert( true === $bridge_info['mcp_adapter']['available'], 'Bridge discovery ability reports adapter availability.' );
 
 wpnb_test_reset_state();
@@ -203,6 +203,9 @@ wpnb_assert( null === Content_Eligibility::post_type_object( 'admin_record' ), '
 wpnb_assert( $content_record === Content_Eligibility::post_type_object( 'content_record' ), 'A content-facing CPT remains eligible for generic Builder content.' );
 wpnb_assert( false === Content_Eligibility::supports_blocks( 'admin_record' ), 'Administrative non-editor CPTs are rejected as Gutenberg targets.' );
 wpnb_assert( true === Content_Eligibility::supports_blocks( 'content_record' ), 'Content-facing editor CPTs remain valid Gutenberg targets.' );
+wpnb_assert( null === Content_Eligibility::post_type_object( 'wpnb_doc' ), 'Workspace documents are explicitly rejected as generic content.' );
+wpnb_assert( null === Content_Eligibility::post_type_object( 'wpnb_task' ), 'Workspace tasks are explicitly rejected as generic content.' );
+wpnb_assert( false === Content_Eligibility::supports_blocks( 'wpnb_doc' ), 'Workspace documents cannot be targeted by generic Gutenberg abilities.' );
 
 $GLOBALS['wpnb_test']['taxonomies'] = array(
 	'genre' => (object) array(
@@ -247,6 +250,11 @@ wpnb_assert( isset( $GLOBALS['wpnb_test']['registered_abilities']['wp-native-bui
 wpnb_assert( isset( $GLOBALS['wpnb_test']['registered_abilities']['wp-native-builder/user-remove'] ), 'Explicit reassignment user removal ability is registered.' );
 wpnb_assert( ! isset( $GLOBALS['wpnb_test']['registered_abilities']['wp-native-builder/gravity-forms-read'] ), 'Gravity Forms fallback disappears when GFAPI is unavailable.' );
 wpnb_assert( ! isset( $GLOBALS['wpnb_test']['registered_abilities']['wp-native-builder/snippets-read'] ), 'Code Snippets fallback disappears when its supported API is unavailable.' );
+wpnb_assert( isset( $GLOBALS['wpnb_test']['registered_abilities']['wp-native-builder/workspace-resume'] ), 'Compact Workspace resume ability is registered.' );
+wpnb_assert( isset( $GLOBALS['wpnb_test']['registered_abilities']['wp-native-builder/workspace-document'] ), 'Workspace document ability is registered.' );
+wpnb_assert( isset( $GLOBALS['wpnb_test']['registered_abilities']['wp-native-builder/workspace-task'] ), 'Workspace task ability is registered.' );
+wpnb_assert( false === $GLOBALS['wpnb_test']['registered_abilities']['wp-native-builder/workspace-document']['input_schema']['additionalProperties'], 'Workspace document input schema is closed.' );
+wpnb_assert( false === $GLOBALS['wpnb_test']['registered_abilities']['wp-native-builder/workspace-task']['input_schema']['additionalProperties'], 'Workspace task input schema is closed.' );
 
 
 // Simulate the documented GFAPI surface only after the provider-absent assertions above.
@@ -352,16 +360,23 @@ wpnb_assert( strlen( $bounded_entry['error_code'] ) <= 100, 'Mutation log bounds
 wpnb_test_reset_state();
 $page = new Settings_Page( $environment, $settings );
 $page->register_menu();
-wpnb_assert( 'manage_options' === $GLOBALS['wpnb_test']['options_pages'][ Settings_Page::PAGE_SLUG ]['capability'], 'Settings page requires manage_options.' );
+wpnb_assert( 'manage_options' === $GLOBALS['wpnb_test']['menu_pages'][ Settings_Page::PAGE_SLUG ]['capability'], 'Top-level WP Native Builder admin area requires manage_options.' );
+wpnb_assert( 'Dashboard' === $GLOBALS['submenu'][ Settings_Page::PAGE_SLUG ][0][0], 'Top-level parent route is presented as Dashboard in the submenu.' );
+foreach ( array( Settings_Page::DOCUMENTS_SLUG, Settings_Page::TASKS_SLUG, Settings_Page::ACTIVITY_SLUG, Settings_Page::SETTINGS_SLUG ) as $submenu_slug ) {
+	wpnb_assert( isset( $GLOBALS['wpnb_test']['submenu_pages'][ Settings_Page::PAGE_SLUG ][ $submenu_slug ] ), 'Required WP Native Builder submenu is registered: ' . $submenu_slug );
+	wpnb_assert( 'manage_options' === $GLOBALS['wpnb_test']['submenu_pages'][ Settings_Page::PAGE_SLUG ][ $submenu_slug ]['capability'], 'WP Native Builder submenu requires manage_options: ' . $submenu_slug );
+}
 ob_start();
-$page->render();
+$page->render_settings();
 $html = ob_get_clean();
 wpnb_assert( in_array( Settings::OPTION_GROUP, $GLOBALS['wpnb_test']['settings_fields'], true ), 'Settings page uses WordPress Settings API nonce fields.' );
-wpnb_assert( false !== strpos( $html, 'options.php' ), 'Settings page posts through the WordPress Settings API.' );
+wpnb_assert( false !== strpos( $html, 'options.php' ), 'Settings page posts access groups through the WordPress Settings API.' );
+wpnb_assert( false !== strpos( $html, 'wpnb_workspace_export' ), 'Settings page exposes explicit Workspace export.' );
+wpnb_assert( false !== strpos( $html, 'wpnb_workspace_clear' ), 'Settings page exposes explicit confirmed Workspace clear.' );
 
 $GLOBALS['wpnb_test']['capabilities']['manage_options'] = false;
 try {
-	$page->render();
+	$page->render_settings();
 	wpnb_assert( false, 'Settings page must deny users without manage_options.' );
 } catch ( RuntimeException $exception ) {
 	wpnb_assert( true, 'Settings page denies users without manage_options.' );

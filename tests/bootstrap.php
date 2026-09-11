@@ -2,7 +2,7 @@
 error_reporting( E_ALL );
 
 define( 'ABSPATH', '/tmp/wp/' );
-define( 'WP_NATIVE_BUILDER_BRIDGE_VERSION', '0.1.0-dev' );
+define( 'WP_NATIVE_BUILDER_BRIDGE_VERSION', '0.1.0' );
 
 $GLOBALS['wp_version'] = '7.1';
 $GLOBALS['wpnb_test']  = array(
@@ -15,6 +15,8 @@ $GLOBALS['wpnb_test']  = array(
 	'abilities'             => array(),
 	'actions'               => array(),
 	'options_pages'         => array(),
+	'menu_pages'            => array(),
+	'submenu_pages'         => array(),
 	'settings_fields'       => array(),
 	'plugins'               => array(),
 	'post_types'            => array(),
@@ -28,6 +30,7 @@ $GLOBALS['wpnb_test']  = array(
 		'block'      => false,
 	),
 );
+$GLOBALS['submenu'] = array();
 
 function wpnb_test_reset_state() {
 	$GLOBALS['wpnb_test']['options']               = array();
@@ -38,6 +41,9 @@ function wpnb_test_reset_state() {
 	$GLOBALS['wpnb_test']['abilities']             = array();
 	$GLOBALS['wpnb_test']['actions']               = array();
 	$GLOBALS['wpnb_test']['options_pages']         = array();
+	$GLOBALS['wpnb_test']['menu_pages']            = array();
+	$GLOBALS['wpnb_test']['submenu_pages']         = array();
+	$GLOBALS['submenu']                            = array();
 	$GLOBALS['wpnb_test']['settings_fields']       = array();
 	$GLOBALS['wpnb_test']['plugins']               = array();
 	$GLOBALS['wpnb_test']['post_types']            = array();
@@ -139,14 +145,33 @@ function get_current_user_id() { return (int) $GLOBALS['wpnb_test']['user_id']; 
 function get_option( $name, $default = false ) { return array_key_exists( $name, $GLOBALS['wpnb_test']['options'] ) ? $GLOBALS['wpnb_test']['options'][ $name ] : $default; }
 function update_option( $name, $value, $autoload = null ) { $GLOBALS['wpnb_test']['options'][ $name ] = $value; return true; }
 function sanitize_text_field( $value ) { return trim( strip_tags( (string) $value ) ); }
+function sanitize_textarea_field( $value ) { return trim( strip_tags( (string) $value ) ); }
+function wp_kses_post( $value ) { return strip_tags( (string) $value, '<p><a><strong><em><code><pre><ul><ol><li><blockquote>' ); }
+function wp_check_invalid_utf8( $value, $strip = false ) { return (string) $value; }
+function wp_json_encode( $value, $flags = 0, $depth = 512 ) { return json_encode( $value, $flags, $depth ); }
+function wp_slash( $value ) { return $value; }
+function wp_unslash( $value ) { return $value; }
 function sanitize_key( $value ) { return preg_replace( '/[^a-z0-9_\-]/', '', strtolower( (string) $value ) ); }
 function absint( $value ) { return abs( (int) $value ); }
 function add_action( $hook, $callback, $priority = 10, $accepted_args = 1 ) { $GLOBALS['wpnb_test']['actions'][ $hook ][] = $callback; return true; }
 function register_setting( $group, $name, $args = array() ) { $GLOBALS['wpnb_test']['registered_settings'][ $name ] = array( 'group' => $group, 'args' => $args ); }
 function add_options_page( $page_title, $menu_title, $capability, $slug, $callback ) { $GLOBALS['wpnb_test']['options_pages'][ $slug ] = compact( 'page_title', 'menu_title', 'capability', 'slug', 'callback' ); return $slug; }
+function add_menu_page( $page_title, $menu_title, $capability, $slug, $callback = '', $icon_url = '', $position = null ) {
+	$GLOBALS['wpnb_test']['menu_pages'][ $slug ] = compact( 'page_title', 'menu_title', 'capability', 'slug', 'callback', 'icon_url', 'position' );
+	$GLOBALS['submenu'][ $slug ] = array( array( $menu_title, $capability, $slug, $page_title ) );
+	return $slug;
+}
+function add_submenu_page( $parent_slug, $page_title, $menu_title, $capability, $menu_slug, $callback = '' ) {
+	$GLOBALS['wpnb_test']['submenu_pages'][ $parent_slug ][ $menu_slug ] = compact( 'parent_slug', 'page_title', 'menu_title', 'capability', 'menu_slug', 'callback' );
+	$GLOBALS['submenu'][ $parent_slug ][] = array( $menu_title, $capability, $menu_slug, $page_title );
+	return $menu_slug;
+}
 function settings_fields( $group ) { $GLOBALS['wpnb_test']['settings_fields'][] = $group; echo '<input type="hidden" name="_wpnonce" value="test">'; }
 function checked( $checked, $current = true, $echo = true ) { $result = $checked == $current ? 'checked="checked"' : ''; if ( $echo ) { echo $result; } return $result; }
-function submit_button() { echo '<button type="submit">Save Changes</button>'; }
+function selected( $selected, $current = true, $echo = true ) { $result = $selected == $current ? 'selected="selected"' : ''; if ( $echo ) { echo $result; } return $result; }
+function submit_button( $text = 'Save Changes', $type = 'primary', $name = 'submit', $wrap = true ) { echo '<button type="submit">' . esc_html( $text ) . '</button>'; }
+function admin_url( $path = '' ) { return 'https://example.test/wp-admin/' . ltrim( $path, '/' ); }
+function wp_nonce_field( $action = -1, $name = '_wpnonce', $referer = true, $display = true ) { $html = '<input type="hidden" name="' . esc_attr( $name ) . '" value="test">'; if ( $display ) { echo $html; } return $html; }
 function wp_die( $message ) { throw new RuntimeException( (string) $message ); }
 function wp_register_ability_category( $slug, $args ) { $GLOBALS['wpnb_test']['registered_categories'][ $slug ] = $args; return (object) array( 'slug' => $slug ); }
 function wp_register_ability( $name, $args ) { $GLOBALS['wpnb_test']['registered_abilities'][ $name ] = $args; return (object) array( 'name' => $name ); }

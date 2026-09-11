@@ -2,7 +2,7 @@
 
 This inventory is the Issue #5 review surface for Bridge-owned abilities. It records the primary access group and WordPress/provider authority. Object-level capabilities, live-state checks, stale-state checks, and provider-native visibility checks remain enforced in the implementation in addition to the primary group below.
 
-The normal provider-absent installation registers 27 Bridge abilities. Gravity Forms and Code Snippets can add four bounded Bridge fallback abilities each, for a maximum Bridge-owned surface of 35. Astra and verified WooCommerce abilities are reused from their providers and are not re-registered by the Bridge.
+The normal provider-absent installation registers 30 Bridge abilities. Gravity Forms and Code Snippets can add four bounded Bridge fallback abilities each, for a maximum Bridge-owned surface of 38. Astra and verified WooCommerce abilities are reused from their providers and are not re-registered by the Bridge.
 
 | Ability | Primary group | Authority / additional boundary |
 | --- | --- | --- |
@@ -33,6 +33,9 @@ The normal provider-absent installation registers 27 Bridge abilities. Gravity F
 | `users-read` | Site Read | `list_users`; no credential/session material |
 | `user-upsert` | Users & Destructive | create/edit/promote authority; generated credential never returned/logged |
 | `user-remove` | Users & Destructive | `delete_user`; explicit reassignment; no self-removal |
+| `workspace-resume` | Site Read | `edit_posts`; compact orientation only, no document bodies/task notes/history dump |
+| `workspace-document` | Site Read for list/get; Builder Write for mutation | `edit_posts`; private internal storage; update/archive require `expected_version` + `expected_state_hash` |
+| `workspace-task` | Site Read for list/get; Builder Write for mutation | `edit_posts`; private internal storage; independent progress/review/delivery state; update/transition/archive require expected identity |
 | `gravity-forms-read` *(optional fallback)* | Site Read | Gravity Forms view capability; `GFAPI` only; suppressed by native `gravityforms/*` surface |
 | `gravity-form-upsert` *(optional fallback)* | Builder Write | Gravity Forms create/edit capability; `GFAPI` only |
 | `gravity-form-status` *(optional fallback)* | Builder Write | Gravity Forms edit capability; `GFAPI` only |
@@ -46,8 +49,8 @@ The normal provider-absent installation registers 27 Bridge abilities. Gravity F
 
 The v0.1 Bridge does not expose arbitrary SQL, shell commands, process execution, raw filesystem paths, arbitrary package URLs, arbitrary `wp_options`, credential/session retrieval, or provider-table access. Managed Code Snippets code is the intentional narrow exception to generic code mutation: it is available only when that plugin's supported lifecycle API exists and remains behind Code & Extensions/provider capabilities. The Bridge never evaluates the submitted snippet itself.
 
-Media upload accepts bytes plus a filename, writes exactly one WordPress-generated temporary path, and then hands the file to WordPress sideload/media APIs. A caller cannot supply a server path.
+Media upload accepts bytes plus a filename, writes exactly one WordPress-generated temporary path, and then hands the file to WordPress sideload/media APIs. A caller cannot supply a server path. Plugin/theme installation accepts only WordPress.org slugs through WordPress administration APIs; arbitrary ZIP/package URL, PHP file, and server-path upload are intentionally absent.
 
 ## Optimistic concurrency boundary
 
-Full content update and revision restore compare `modified_gmt` plus the mutation-relevant `state_hash` immediately before the WordPress write. Targeted Gutenberg mutation compares `modified_gmt` plus the owned `post_content` hash. These are optimistic stale-write guards through supported WordPress APIs; the Bridge does not implement a private lock manager or direct SQL compare-and-swap layer.
+Full content update and revision restore compare `modified_gmt` plus the mutation-relevant `state_hash` immediately before the WordPress write. Targeted Gutenberg mutation compares `modified_gmt` plus the owned `post_content` hash. Workspace document/task mutation uses a Bridge-owned monotonic `version` plus deterministic `state_hash` and an atomic WordPress Metadata API compare-and-swap against the exact prior state payload. These paths remain separate: Workspace concurrency does not depend on WordPress revision rows and the Bridge introduces no production direct-SQL lock manager.

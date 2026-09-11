@@ -71,8 +71,8 @@ try {
 		}
 	}
 	sort( $names );
-	wpnb_issue5_assert( 27 === count( $names ), 'Baseline Bridge registry must contain exactly 27 abilities without optional provider fallbacks.' );
-	wpnb_issue5_assert( 27 === count( array_unique( $names ) ), 'Bridge ability names are not unique.' );
+	wpnb_issue5_assert( 30 === count( $names ), 'Baseline Bridge registry must contain exactly 30 abilities without optional provider fallbacks.' );
+	wpnb_issue5_assert( 30 === count( array_unique( $names ) ), 'Bridge ability names are not unique.' );
 
 	$defaults = $settings->defaults();
 	wpnb_issue5_assert( 1 === $defaults[ Settings::GROUP_SITE_READ ], 'Site Read is not the sole enabled default group.' );
@@ -82,6 +82,7 @@ try {
 	update_option( Settings::OPTION_NAME, $defaults, false );
 
 	wpnb_issue5_assert( is_wp_error( wpnb_issue5_execute( 'wp-native-builder/content-upsert', array( 'action'=>'create', 'post_type'=>'post', 'title'=>'Denied draft', 'status'=>'draft' ) ) ), 'Builder Write disabled group allowed content mutation.' );
+	wpnb_issue5_assert( is_wp_error( wpnb_issue5_execute( 'wp-native-builder/workspace-document', array( 'action'=>'create', 'title'=>'Denied Workspace document' ) ) ), 'Builder Write disabled group allowed Workspace mutation.' );
 	wpnb_issue5_assert( is_wp_error( wpnb_issue5_execute( 'wp-native-builder/site-settings-update', array( 'tagline'=>'Denied config' ) ) ), 'Site Configuration disabled group allowed configuration mutation.' );
 	wpnb_issue5_assert( is_wp_error( wpnb_issue5_execute( 'wp-native-builder/extension-lifecycle', array( 'kind'=>'plugin', 'action'=>'activate', 'target'=>'mcp-adapter/mcp-adapter.php' ) ) ), 'Code & Extensions disabled group allowed extension mutation.' );
 	wpnb_issue5_assert( is_wp_error( wpnb_issue5_execute( 'wp-native-builder/user-upsert', array( 'action'=>'create', 'username'=>'wpnb_denied_issue5', 'email'=>'wpnb_denied_issue5@example.invalid', 'role'=>'subscriber' ) ) ), 'Users & Destructive disabled group allowed user creation.' );

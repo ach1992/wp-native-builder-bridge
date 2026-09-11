@@ -64,7 +64,8 @@ for test in \
     issue6-direct-oauth-smoke.php \
     issue6-direct-oauth-negative-smoke.php \
     issue6-direct-mcp-tools-smoke.php \
-    issue6-i18n-smoke.php
+    issue6-i18n-smoke.php \
+    issue8-workspace-smoke.php
 do
     echo "== ${test} =="
     "${wp[@]}" eval-file "wp-content/plugins/wp-native-builder-bridge/tests/integration/${test}" --user=1 --allow-root
@@ -119,6 +120,38 @@ if [[ "${RUN_OPTIONAL_PROVIDERS:-0}" == "1" ]]; then
     bash "$root/bin/run-mcp-provider-smoke.sh"
 fi
 
+echo "== Workspace deactivation/uninstall preservation =="
+"${wp[@]}" eval '
+$store = new WP_Native_Builder_Bridge\Workspace\Store();
+$doc = $store->create_document(array("key" => "lifecycle-fixture", "title" => "Lifecycle fixture", "content" => "Preserve across deactivate/uninstall."));
+$task = $store->create_task(array("title" => "Lifecycle fixture task", "progress" => "in_progress", "review" => "not_required", "delivery" => "not_applicable"));
+if (is_wp_error($doc) || is_wp_error($task)) { exit(1); }
+update_option("wpnb_integration_workspace_preserve_ids", array("document_id" => (int) $doc["id"], "document_hash" => $doc["state_hash"], "task_id" => (int) $task["id"], "task_hash" => $task["state_hash"]), false);
+' --user=1 --allow-root >/dev/null
+"${wp[@]}" plugin deactivate wp-native-builder-bridge --allow-root >/dev/null
+if ! "${wp[@]}" eval '
+$fixture = get_option("wpnb_integration_workspace_preserve_ids", array());
+foreach (array("document_id", "task_id") as $key) {
+    $id = isset($fixture[$key]) ? (int) $fixture[$key] : 0;
+    if ($id < 1 || ! get_post($id) || "" === (string) get_post_meta($id, "_wpnb_workspace_state", true)) { exit(1); }
+}
+' --allow-root >/dev/null; then
+    echo "ERROR: Workspace data did not survive plugin deactivation." >&2
+    exit 1
+fi
+"${wp[@]}" plugin activate wp-native-builder-bridge --allow-root >/dev/null
+if ! "${wp[@]}" eval '
+$fixture = get_option("wpnb_integration_workspace_preserve_ids", array());
+$store = new WP_Native_Builder_Bridge\Workspace\Store();
+$doc = $store->get_document((int) ($fixture["document_id"] ?? 0));
+$task = $store->get_task((int) ($fixture["task_id"] ?? 0));
+if (is_wp_error($doc) || is_wp_error($task) || ! hash_equals((string) $fixture["document_hash"], (string) $doc["state_hash"]) || ! hash_equals((string) $fixture["task_hash"], (string) $task["state_hash"])) { exit(1); }
+' --user=1 --allow-root >/dev/null; then
+    echo "ERROR: Workspace state identity changed across plugin deactivation/reactivation." >&2
+    exit 1
+fi
+echo "Workspace deactivation preservation: PASS"
+
 echo "== release uninstall cleanup =="
 "${wp[@]}" option update wp_native_builder_bridge_settings '{"site_read":1}' --format=json --allow-root >/dev/null
 "${wp[@]}" option update wp_native_builder_bridge_recent_actions '[{"ability":"fixture"}]' --format=json --allow-root >/dev/null
@@ -165,6 +198,27 @@ if "${wp[@]}" plugin is-installed wp-native-builder-bridge --allow-root >/dev/nu
     echo "ERROR: plugin files survived WP-CLI uninstall." >&2
     exit 1
 fi
+if ! "${wp[@]}" eval '
+$fixture = get_option("wpnb_integration_workspace_preserve_ids", array());
+$pairs = array("document_id" => "document_hash", "task_id" => "task_hash");
+foreach ($pairs as $id_key => $hash_key) {
+    $id = isset($fixture[$id_key]) ? (int) $fixture[$id_key] : 0;
+    $json = $id > 0 ? (string) get_post_meta($id, "_wpnb_workspace_state", true) : "";
+    if ($id < 1 || ! get_post($id) || "" === $json || ! hash_equals((string) ($fixture[$hash_key] ?? ""), hash("sha256", $json))) { exit(1); }
+}
+' --allow-root >/dev/null; then
+    echo "ERROR: Workspace data did not survive plugin uninstall." >&2
+    exit 1
+fi
+"${wp[@]}" eval '
+$fixture = get_option("wpnb_integration_workspace_preserve_ids", array());
+foreach (array("document_id", "task_id") as $key) {
+    $id = isset($fixture[$key]) ? (int) $fixture[$key] : 0;
+    if ($id > 0) { wp_delete_post($id, true); }
+}
+delete_option("wpnb_integration_workspace_preserve_ids");
+' --allow-root >/dev/null
+echo "Workspace uninstall preservation: PASS"
 echo "Release uninstall cleanup: PASS"
 
 echo "PASS: Docker integration suite for ${wordpress_tag}."

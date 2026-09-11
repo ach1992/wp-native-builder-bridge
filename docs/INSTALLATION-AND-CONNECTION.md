@@ -42,7 +42,7 @@ The Bridge creates a dedicated MCP server through the official MCP Adapter inste
 1. Install and activate the official WordPress MCP Adapter using its supported release package.
 2. Upload `wp-native-builder-bridge.zip` at **Plugins -> Add Plugin -> Upload Plugin**.
 3. Activate **WP Native Builder Bridge**.
-4. Open **Settings -> WP Native Builder**.
+4. Open **WP Native Builder -> Settings** from the top-level WordPress admin menu.
 5. Confirm **MCP Adapter** is available and **Public HTTPS** reports ready.
 6. Copy the **App MCP endpoint** shown on that page.
 7. Review the Bridge access groups before enabling write-sensitive groups.
@@ -69,7 +69,7 @@ The URL entered in ChatGPT is:
 https://YOUR-WORDPRESS-SITE.example/wp-json/wp-native-builder/v1/mcp
 ```
 
-Use the exact URL displayed by **Settings -> WP Native Builder**. Do not substitute the MCP Adapter default endpoint.
+Use the exact URL displayed by **WP Native Builder -> Settings**. Do not substitute the MCP Adapter default endpoint.
 
 The direct endpoint is deliberately Bearer-only. WordPress cookie login, Basic authentication, and WordPress Application Passwords do not bypass its OAuth boundary.
 
@@ -147,6 +147,27 @@ OAuth authorization never promotes a WordPress user's role and never enables a d
 
 Use a dedicated WordPress account with the narrowest practical role/capabilities when the App does not need full administrator access.
 
+## Persistent Workspace and admin area
+
+The first public release includes the Bridge-owned Persistent Workspace. WordPress administrators see:
+
+```text
+WP Native Builder
+├── Dashboard
+├── Documents
+├── Tasks
+├── Activity
+└── Settings
+```
+
+`Dashboard` is intentionally compact. `Documents` and `Tasks` inspect/filter durable Workspace state without exposing the underlying private storage through the normal WordPress post editor. `Activity` is the bounded metadata-only Bridge mutation log and is not project memory. `Settings` contains connection status, access groups, Workspace export, and the explicit destructive clear control.
+
+Connected clients discover three dedicated Workspace abilities: `wp-native-builder/workspace-resume`, `wp-native-builder/workspace-document`, and `wp-native-builder/workspace-task`. Workspace reads require **Site Read** plus an appropriate WordPress editing capability; Workspace writes require **Builder Write** plus the corresponding WordPress capability. Whole-Workspace clear is available only in the administrator UI and additionally requires **Users & Destructive**, a WordPress nonce, and an explicit confirmation checkbox.
+
+Workspace current state and stale-write identity do not depend on WordPress revisions. Updates/archives require the object's current `expected_version` and `expected_state_hash`; on `workspace_stale`, re-read and reconcile before retrying.
+
+Use **Export Workspace** before major maintenance or when you want a portable JSON snapshot of the current durable Workspace state. Deactivation and normal plugin uninstall preserve Workspace documents/tasks. To intentionally erase them, use **Clear Workspace** before uninstalling.
+
 ## Public HTTPS requirements
 
 ChatGPT must be able to reach the MCP endpoint and OAuth discovery endpoints from the Internet. Verify all of the following before creating the App:
@@ -191,11 +212,11 @@ The Bridge does not own provider data. Updating it must not rewrite content mere
 
 ## Deactivate and uninstall
 
-Deactivation stops Bridge registration but does not delete site content, media, terms, users, provider objects, or provider data.
+Deactivation stops Bridge registration but does not delete site content, media, terms, users, provider objects, provider data, or Workspace documents/tasks.
 
-The v0.1 uninstall handler removes the Bridge-owned per-site settings/mutation metadata and OAuth installation identity, clears the cached ChatGPT client metadata/JWKS, removes short-lived client-assertion replay claims, and clears their cleanup events. Removing the OAuth installation identity also invalidates every previously issued Bridge OAuth artifact.
+The uninstall handler removes the Bridge-owned per-site settings/mutation metadata and OAuth installation identity, clears the cached ChatGPT client metadata/JWKS, removes short-lived client-assertion replay claims, and clears their cleanup events. Removing the OAuth installation identity also invalidates every previously issued Bridge OAuth artifact.
 
-It does not delete WordPress/provider content. The post-v0.1 Persistent Workspace has a separate retention contract: future Workspace data must not be silently added to this uninstall deletion path.
+It does not delete WordPress/provider content **or Persistent Workspace documents/tasks**. Workspace retention is deliberate: uninstall is not the destructive Workspace lifecycle action. If the administrator wants Workspace data erased, use **WP Native Builder -> Settings -> Clear Workspace** first.
 
 Rollback is therefore normally: deactivate the current Bridge, reinstall the previously validated Bridge ZIP, activate it, verify access groups, and re-scan the custom App.
 

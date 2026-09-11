@@ -15,7 +15,7 @@ If `wp mcp-adapter` does not exist, verify the official Adapter was installed an
 
 ## 2. ChatGPT cannot create or scan the App
 
-Open **Settings -> WP Native Builder** in WordPress and verify:
+Open **WP Native Builder -> Settings** in WordPress and verify:
 
 - MCP Adapter is available;
 - Public HTTPS reports ready;
@@ -111,7 +111,7 @@ There are independent authorization layers:
 5. object/provider-specific permission and live/destructive boundary;
 6. ChatGPT workspace/app permission and confirmation policy.
 
-Inspect **Settings -> WP Native Builder** and the connected WordPress user's actual role/capabilities. Do not promote to Administrator unless the task really needs administrator authority.
+Inspect **WP Native Builder -> Settings** and the connected WordPress user's actual role/capabilities. Do not promote to Administrator unless the task really needs administrator authority.
 
 Typical examples:
 
@@ -134,7 +134,17 @@ On a conflict:
 
 Do not reuse the old hash or disable the conflict check.
 
-## 10. MCP endpoint or well-known URLs return a normal page or 404
+## 10. Workspace is missing or stale
+
+A current Bridge build should expose `wp-native-builder/workspace-resume`, `wp-native-builder/workspace-document`, and `wp-native-builder/workspace-task` through Ability discovery. WordPress administrators should also see the top-level `WP Native Builder` menu with Dashboard, Documents, Tasks, Activity, and Settings.
+
+If a Workspace write returns `workspace_stale`, do not retry with the old identity. Re-read the document/task, reconcile the intended change, and retry with the newly observed `version` and `state_hash`. Workspace concurrency is independent of WordPress revisions, so enabling or restoring revisions is not a stale-conflict workaround.
+
+Underlying `wpnb_doc` and `wpnb_task` records are intentionally private/internal. They should not appear as ordinary Posts/Pages, public REST content, search results, feeds, or generic Gutenberg targets. Use the dedicated Workspace abilities/admin inspection screens rather than making those post types public.
+
+Deactivation and uninstall preserve Workspace data. Use **WP Native Builder -> Settings -> Export Workspace** for a JSON snapshot. Use **Clear Workspace** only when you intentionally want to permanently erase all Workspace documents/tasks; it requires Administrator access, **Users & Destructive**, a nonce, and explicit confirmation.
+
+## 11. MCP endpoint or well-known URLs return a normal page or 404
 
 Verify the site's standard WordPress REST/rewrite configuration. The direct App depends on normal public WordPress routing for:
 
@@ -148,7 +158,7 @@ If `/wp-json/` itself is broken, fix normal WordPress REST routing first. Do not
 
 For Apache, confirm the normal WordPress rewrite rules are active. For Nginx or another front end, confirm unmatched WordPress routes reach `index.php` according to the site's standard configuration.
 
-## 11. MCP session errors
+## 12. MCP session errors
 
 The Bridge direct endpoint uses the official MCP Adapter HTTP transport, so its session behavior follows the pinned Adapter baseline.
 
@@ -161,29 +171,29 @@ For MCP Adapter v0.6.1 as verified by this project:
 
 A newly initialized session ID must be used for subsequent session-bound requests. Reconnect rather than reusing an expired session ID.
 
-## 12. Reverse proxy reports HTTP instead of HTTPS
+## 13. Reverse proxy reports HTTP instead of HTTPS
 
 The WordPress settings page derives the App resource from WordPress REST URL generation. If a TLS-terminating proxy is configured incorrectly, WordPress may generate an `http://` resource even though visitors browse over HTTPS.
 
 Fix the standard WordPress/reverse-proxy HTTPS detection and canonical `home`/`siteurl` configuration. Do not hard-code a different OAuth resource URI, because authorization codes and tokens are deliberately bound to that exact resource.
 
-## 13. Extension install/update fails
+## 14. Extension install/update fails
 
 The Bridge uses WordPress Core administration APIs. Its install surface accepts a WordPress.org slug; it does not accept an arbitrary remote package URL or caller-selected server path.
 
 If WordPress reports that filesystem access/credentials are required, configure WordPress filesystem access out-of-band and retry. The Bridge does not collect FTP/SSH credentials.
 
-## 14. Code Snippets operation fails
+## 15. Code Snippets operation fails
 
 The Bridge asks current Code Snippets for its effective capability instead of hardcoding removed legacy capability names. The provider's supported scope list is authoritative, locked snippets are rejected, and permanent deletion requires the snippet to be trashed first plus **Users & Destructive**.
 
 The Bridge never evaluates the snippet directly; execution/activation remains provider-owned.
 
-## 15. Gravity Forms behavior differs from CI
+## 16. Gravity Forms behavior differs from CI
 
 The automated transport-level v0.1 test uses a test-only GFAPI contract fixture because a commercial Gravity Forms binary is not included in CI. Treat a real provider-version difference as a provider-integration compatibility issue and validate against that installed version's current public `GFAPI`/Ability contract. Do not couple the Bridge to Gravity Forms private tables.
 
-## 16. Run the project verification locally
+## 17. Run the project verification locally
 
 Quality gate:
 

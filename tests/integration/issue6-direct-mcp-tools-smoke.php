@@ -162,6 +162,12 @@ wpnb_issue6_direct_tools_assert(
 	in_array( 'wp-native-builder/bridge-info', $ability_names, true ),
 	'Direct OAuth MCP discovery did not expose bridge-info from the live mcp.public registry.'
 );
+foreach ( array( 'wp-native-builder/workspace-resume', 'wp-native-builder/workspace-document', 'wp-native-builder/workspace-task' ) as $workspace_ability ) {
+	wpnb_issue6_direct_tools_assert(
+		in_array( $workspace_ability, $ability_names, true ),
+		'Direct OAuth MCP discovery did not expose Workspace ability: ' . $workspace_ability
+	);
+}
 
 $execute = wpnb_issue6_direct_tools_request(
 	'POST',
@@ -184,6 +190,29 @@ wpnb_issue6_direct_tools_assert( 200 === $execute->get_status(), 'Direct OAuth M
 $execute_data       = wpnb_issue6_direct_tools_data( $execute );
 $execute_structured = wpnb_issue6_direct_tools_structured_content( $execute_data );
 wpnb_issue6_direct_tools_assert( true === ( $execute_structured['success'] ?? false ), 'Direct OAuth MCP bridge-info execution did not succeed.' );
+
+$workspace_resume = wpnb_issue6_direct_tools_request(
+	'POST',
+	$token,
+	array(
+		'jsonrpc' => '2.0',
+		'id'      => 5,
+		'method'  => 'tools/call',
+		'params'  => array(
+			'name'      => 'mcp-adapter-execute-ability',
+			'arguments' => array(
+				'ability_name' => 'wp-native-builder/workspace-resume',
+				'parameters'   => (object) array(),
+			),
+		),
+	),
+	$session_id
+);
+wpnb_issue6_direct_tools_assert( 200 === $workspace_resume->get_status(), 'Direct OAuth MCP Workspace resume request failed.' );
+$workspace_data       = wpnb_issue6_direct_tools_data( $workspace_resume );
+$workspace_structured = wpnb_issue6_direct_tools_structured_content( $workspace_data );
+wpnb_issue6_direct_tools_assert( true === ( $workspace_structured['success'] ?? false ), 'Direct OAuth MCP Workspace resume execution did not succeed.' );
+wpnb_issue6_direct_tools_assert( isset( $workspace_structured['data']['counts'] ), 'Direct OAuth MCP Workspace resume did not return compact counts.' );
 
 $delete = wpnb_issue6_direct_tools_request( 'DELETE', $token, array(), $session_id );
 wpnb_issue6_direct_tools_assert( in_array( $delete->get_status(), array( 200, 204 ), true ), 'Direct OAuth MCP session termination failed.' );

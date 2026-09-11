@@ -1001,7 +1001,7 @@ final class OAuth_Server {
 		<?php if ( in_array( self::SCOPE_OFFLINE, $this->parse_scope( (string) $request['scope'] ), true ) ) : ?>
 			<p><?php echo esc_html__( 'The offline_access scope lets ChatGPT refresh this OAuth connection without asking you to sign in again each time. It does not enable any Bridge access group or add WordPress capabilities.', 'wp-native-builder-bridge' ); ?></p>
 		<?php endif; ?>
-		<p><?php echo esc_html__( 'Access remains limited by the enabled groups under Settings → WP Native Builder. You can deny this request without changing those settings.', 'wp-native-builder-bridge' ); ?></p>
+		<p><?php echo esc_html__( 'Access remains limited by the enabled groups under WP Native Builder → Settings. You can deny this request without changing those settings.', 'wp-native-builder-bridge' ); ?></p>
 		<form method="post" action="<?php echo esc_url( $this->authorization_endpoint_url() ); ?>">
 			<input type="hidden" name="consent_id" value="<?php echo esc_attr( $consent_id ); ?>">
 			<?php wp_nonce_field( 'wpnb_oauth_consent_' . $consent_id ); ?>
