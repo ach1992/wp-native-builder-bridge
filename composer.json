@@ -16,12 +16,14 @@
     "sort-packages": true
   },
   "scripts": {
+    "validate-package": "composer validate --strict",
     "lint": "bash bin/lint-php.sh",
     "test": "php tests/run.php",
     "phpcs": "phpcs",
     "i18n": "php bin/check-i18n.php",
     "build": "bash bin/build-zip.sh",
     "check": [
+      "@validate-package",
       "@lint",
       "@test",
       "@phpcs",
