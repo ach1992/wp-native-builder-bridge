@@ -112,11 +112,25 @@ final class Plugin {
 
 		$this->oauth_server->boot();
 
+		add_action( 'init', array( $this, 'load_textdomain' ), 1 );
 		add_action( 'admin_init', array( $this->settings, 'register' ) );
 		add_action( 'admin_menu', array( $this->settings_page, 'register_menu' ) );
 		add_action( 'admin_notices', array( $this, 'render_dependency_notices' ) );
 		add_action( 'wp_abilities_api_categories_init', array( $this->registrar, 'register_category' ) );
 		add_action( 'wp_abilities_api_init', array( $this->registrar, 'register_abilities' ), 100 );
+	}
+
+	/**
+	 * Loads bundled translations for self-hosted installations.
+	 *
+	 * @return void
+	 */
+	public function load_textdomain() {
+		load_plugin_textdomain(
+			'wp-native-builder-bridge',
+			false,
+			dirname( plugin_basename( WP_NATIVE_BUILDER_BRIDGE_FILE ) ) . '/languages/'
+		);
 	}
 
 	/**

@@ -63,7 +63,8 @@ for test in \
     issue6-http-transport-smoke.php \
     issue6-direct-oauth-smoke.php \
     issue6-direct-oauth-negative-smoke.php \
-    issue6-direct-mcp-tools-smoke.php
+    issue6-direct-mcp-tools-smoke.php \
+    issue6-i18n-smoke.php
 do
     echo "== ${test} =="
     "${wp[@]}" eval-file "wp-content/plugins/wp-native-builder-bridge/tests/integration/${test}" --user=1 --allow-root
@@ -89,6 +90,12 @@ bash "$root/bin/run-direct-http-smoke.sh"
 bash "$root/bin/run-mcp-stdio-smoke.sh"
 
 if [[ "${RUN_OPTIONAL_PROVIDERS:-0}" == "1" ]]; then
+    echo "== Code Snippets 3.9.6 provider integration =="
+    "${wp[@]}" plugin install code-snippets --version=3.9.6 --activate --allow-root
+    "${wp[@]}" eval-file wp-content/plugins/wp-native-builder-bridge/tests/integration/issue4-code-snippets-smoke.php --user=1 --allow-root
+    "${wp[@]}" plugin deactivate code-snippets --allow-root >/dev/null
+    "${wp[@]}" plugin delete code-snippets --allow-root >/dev/null
+
     echo "== Code Snippets 3.10.2 provider integration =="
     "${wp[@]}" plugin install code-snippets --version=3.10.2 --activate --allow-root
     "${wp[@]}" eval-file wp-content/plugins/wp-native-builder-bridge/tests/integration/issue4-code-snippets-smoke.php --user=1 --allow-root

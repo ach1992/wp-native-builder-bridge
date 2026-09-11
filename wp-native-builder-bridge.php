@@ -2,9 +2,12 @@
 /**
  * Plugin Name: WP Native Builder Bridge
  * Description: Exposes typed, permission-checked WordPress abilities for AI-assisted site building.
- * Version: 0.1.0-dev
+ * Version: 0.1.0
  * Requires at least: 6.9
+ * License: GPL v2 or later
+ * License URI: https://www.gnu.org/licenses/gpl-2.0.html
  * Text Domain: wp-native-builder-bridge
+ * Domain Path: /languages
  *
  * @package WP_Native_Builder_Bridge
  */
@@ -13,7 +16,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-define( 'WP_NATIVE_BUILDER_BRIDGE_VERSION', '0.1.0-dev' );
+define( 'WP_NATIVE_BUILDER_BRIDGE_VERSION', '0.1.0' );
 define( 'WP_NATIVE_BUILDER_BRIDGE_FILE', __FILE__ );
 define( 'WP_NATIVE_BUILDER_BRIDGE_DIR', __DIR__ );
 
