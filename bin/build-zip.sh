@@ -13,7 +13,9 @@ mkdir -p "$plugin_dir"
 cp "$root/wp-native-builder-bridge.php" "$plugin_dir/"
 cp "$root/uninstall.php" "$plugin_dir/"
 cp "$root/README.md" "$plugin_dir/"
+cp "$root/LICENSE" "$plugin_dir/"
 cp -R "$root/src" "$plugin_dir/src"
+cp -R "$root/languages" "$plugin_dir/languages"
 rm -f "$zip_file"
 
 php -r '
@@ -47,6 +49,10 @@ mapfile -t entries < <(unzip -Z1 "$zip_file")
 required=(
     "wp-native-builder-bridge/wp-native-builder-bridge.php"
     "wp-native-builder-bridge/uninstall.php"
+    "wp-native-builder-bridge/LICENSE"
+    "wp-native-builder-bridge/languages/wp-native-builder-bridge.pot"
+    "wp-native-builder-bridge/languages/wp-native-builder-bridge-fa_IR.po"
+    "wp-native-builder-bridge/languages/wp-native-builder-bridge-fa_IR.l10n.php"
     "wp-native-builder-bridge/src/class-plugin.php"
 )
 for path in "${required[@]}"; do
