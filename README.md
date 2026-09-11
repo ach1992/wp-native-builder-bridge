@@ -1,187 +1,136 @@
 # WP Native Builder Bridge
 
-A free, self-hosted WordPress plugin that exposes typed, permission-checked WordPress abilities for AI-assisted site building.
+[![CI](https://github.com/ach1992/wp-native-builder-bridge/actions/workflows/ci.yml/badge.svg)](https://github.com/ach1992/wp-native-builder-bridge/actions/workflows/ci.yml)
+[![Latest release](https://img.shields.io/github/v/release/ach1992/wp-native-builder-bridge)](https://github.com/ach1992/wp-native-builder-bridge/releases/latest)
+[![License](https://img.shields.io/badge/license-GPL--2.0--or--later-blue.svg)](./LICENSE)
 
-The bridge is the companion runtime for [`wp-native-builder`](https://github.com/ach1992/wp-native-builder). It exists to reduce manual WordPress admin work while keeping the site owner in control of which access groups are available.
+WP Native Builder Bridge connects a WordPress site to ChatGPT through a direct HTTPS MCP endpoint, WordPress-backed OAuth, the official WordPress MCP Adapter, and the WordPress Abilities API.
 
-## Repository ownership
+It exposes bounded, typed site-management abilities while keeping WordPress capabilities and explicit Bridge access groups in control.
 
-This repository owns only the **WP Native Builder Bridge plugin/runtime**. A Master assigned to `ach1992/wp-native-builder-bridge` must not modify or administer the companion `ach1992/wp-native-builder` Skill repository unless the owner explicitly changes that assignment.
+## What it provides
 
-Cross-repository coordination is contract-based: when a Bridge decision changes what the Skill needs to know, persist the Bridge-side decision here and provide a concise handoff to the Skill Master. The Skill Master owns any Skill-side documentation, Issues, code, packaging, or release changes. Likewise, requirements arriving from the Skill are inputs to reconcile against this repository's current authoritative specification/issues; they do not authorize the Bridge Master to mutate the Skill repository or silently override Bridge-local contracts.
+- Direct ChatGPT Workspace App connection over HTTPS with OAuth 2.1 and PKCE.
+- Read and update posts, pages, supported custom post types, revisions, and Gutenberg blocks.
+- Media Library read, upload, update, and delete operations.
+- Taxonomy and classic navigation management.
+- Bounded WordPress site settings.
+- WordPress.org plugin/theme lifecycle operations.
+- User and role administration behind an explicit destructive-access group.
+- Persistent Workspace documents and tasks for durable project context.
+- Native Astra Ability reuse when Astra Abilities are enabled.
+- Managed Code Snippets lifecycle support for compatible Code Snippets versions.
+- Gravity Forms fallback through GFAPI when no native Gravity Forms Ability surface is active.
+- Persian (`fa_IR`) localization and RTL-compatible admin screens.
 
-This ownership boundary applies to source files, documentation, Issues, branches, pull requests, releases, and project administration. It does not prevent read-only inspection of the companion project when a current interface/dependency must be verified.
+## Requirements
 
-## Architecture
+- WordPress **6.9 or newer**.
+- The official [WordPress MCP Adapter](https://github.com/WordPress/mcp-adapter), currently validated with `0.6.1`.
+- HTTPS and a publicly reachable WordPress REST API for direct ChatGPT Workspace App connections.
+- A WordPress account with the capabilities required for the operations you enable.
 
-The normal ChatGPT v0.1 path is a direct custom Workspace App over public HTTPS:
+## Install
 
-```text
-ChatGPT Workspace App
-  -> Bridge direct HTTPS MCP endpoint
-  -> WordPress-backed OAuth 2.1 authorization
-  -> official WordPress MCP Adapter HttpTransport
-  -> WordPress Abilities API / registry
-       -> compatible abilities already provided by WordPress/plugins
-       -> WP Native Builder Bridge abilities for missing capabilities
-  -> WordPress / Gutenberg / optional site integrations
-```
+1. Download `wp-native-builder-bridge.zip` from the [latest GitHub release](https://github.com/ach1992/wp-native-builder-bridge/releases/latest).
+2. In WordPress open **Plugins → Add Plugin → Upload Plugin**.
+3. Upload the ZIP, install it, and activate **WP Native Builder Bridge**.
+4. Install and activate the official WordPress MCP Adapter if it is not already active.
+5. Open **WP Native Builder → Settings**.
 
-The default WordPress install remains intentionally small: **official MCP Adapter + WP Native Builder Bridge**. The direct ChatGPT App path does not require Secure MCP Tunnel, a proxy daemon, a helper ability pack, WPVibe, a paid identity provider, or another MCP server.
+See [Installation and connection](./docs/INSTALLATION.md) for the complete setup.
 
-When WordPress Core or an already-installed plugin exposes a suitable stable Ability, the Bridge prefers discovery/reuse over duplicating the same operation. If no suitable Ability exists, the Bridge fills that capability gap through supported WordPress/plugin APIs. Extra helper plugins are not installed merely to enlarge the AI tool catalogue.
+## Connect ChatGPT
 
-The Bridge creates its ChatGPT-facing MCP route through the official Adapter's supported server/`HttpTransport` surface. The Adapter's default server remains available independently for other MCP clients.
-
-## Direct ChatGPT App
-
-After installation on an Internet-reachable WordPress site with valid HTTPS, **WP Native Builder -> Settings** displays the exact MCP URL to enter when creating the custom App:
+On an HTTPS WordPress site, **WP Native Builder → Settings** shows the exact MCP endpoint for the site:
 
 ```text
 https://YOUR-SITE.example/wp-json/wp-native-builder/v1/mcp
 ```
 
-The direct route is protected by a WordPress-native OAuth flow designed for current ChatGPT MCP authentication requirements: protected-resource metadata, authorization-server metadata, ChatGPT Client ID Metadata Document validation, Authorization Code + PKCE `S256`, exact resource binding, short-lived access tokens, rotating refresh tokens, revocation, and HTTP 401 discovery challenges.
+In a ChatGPT workspace with Developer Mode enabled:
 
-The browser authorization step uses the normal WordPress account. OAuth never bypasses Bridge access groups or WordPress capabilities. Bearer/code/refresh secrets are opaque and are not persisted in plaintext.
+1. Open **Workspace settings → Apps**.
+2. Create a custom App.
+3. Enter the MCP endpoint shown by WordPress.
+4. Choose OAuth authentication and run **Scan Tools**.
+5. Sign in to WordPress when prompted.
+6. Review the WordPress consent page and authorize ChatGPT.
 
-See [`docs/INSTALLATION-AND-CONNECTION.md`](./docs/INSTALLATION-AND-CONNECTION.md) for the exact Workspace App setup.
+No tunnel or separate proxy service is required for the direct HTTPS setup.
 
-## Target capabilities
+## WordPress admin
 
-- site/environment inspection;
-- posts, pages, supported custom post types, revisions, and statuses;
-- structured Gutenberg block inspection and targeted edits;
-- media inspection/upload/update/delete, taxonomies, and navigation;
-- Astra/Astra Pro integration where supported public interfaces exist;
-- Gravity Forms through its supported public API or suitable native Abilities when available;
-- Code Snippets Pro where a stable supported integration API/Ability can be verified, including managed PHP/CSS/JavaScript/HTML snippet lifecycle where supported;
-- site configuration;
-- plugin/theme lifecycle operations, including WordPress.org slug-based installation;
-- users/roles and destructive operations when explicitly enabled;
-- persistent Workspace resume/documents/tasks with stale-write protection and administrator inspection/export/clear lifecycle.
+The plugin adds a top-level **WP Native Builder** menu:
 
-The bridge intentionally does **not** expose arbitrary PHP, SQL, shell/WP-CLI, unrestricted filesystem access, credential retrieval, arbitrary plugin ZIP/package installation, or caller-selected server-path upload. `media-upload` is the bounded upload surface: it accepts base64 file bytes plus a filename, is capped by the smaller of the WordPress upload limit and 20 MiB, and hands the file to WordPress media handling. This does not prohibit managed PHP snippets: when the Code Snippets integration supports them, the bridge may create, update, activate, deactivate, and delete PHP snippets through the plugin's managed lifecycle instead of executing arbitrary PHP directly.
+- **Dashboard** — Workspace summary and connection status.
+- **Documents** — durable project documents.
+- **Tasks** — durable work items with independent progress, review, and delivery state.
+- **Activity** — bounded mutation activity.
+- **Settings** — ChatGPT connection details and Bridge access groups.
 
-## Admin access model
+Workspace state is private to WordPress and is not exposed through ordinary post or Gutenberg abilities.
 
-The WordPress administrator controls a small set of grouped switches:
+## Access groups
 
-- Site Read
-- Builder Write
-- Live Content
-- Site Configuration
-- Code & Extensions
-- Users & Destructive
+Bridge permissions are additive to normal WordPress capabilities. Enabling a Bridge group never grants a WordPress capability the connected user does not already have.
 
-Only Site Read is enabled by default. OAuth transport authorization identifies the WordPress user; it does not grant WordPress capabilities and it does not enable Bridge access groups. ChatGPT workspace/app permissions may add another independent confirmation boundary.
+| Group | Purpose |
+| --- | --- |
+| **Site Read** | Inspect site information, content, media, navigation, extensions, integrations, and Workspace state. |
+| **Builder Write** | Create and update drafts, content, Gutenberg blocks, media, taxonomies, navigation, forms, and Workspace objects. |
+| **Live Content** | Permit publishing and other live-content status changes when WordPress also permits them. |
+| **Site Configuration** | Permit bounded global WordPress/theme configuration changes. |
+| **Code & Extensions** | Permit supported managed-snippet and plugin/theme lifecycle operations. |
+| **Users & Destructive** | Permit user/role administration and destructive operations when WordPress also permits them. |
 
-## Platform direction
+Only **Site Read** is enabled by default.
 
-- WordPress 6.9+ (Abilities API)
-- official [`WordPress/mcp-adapter`](https://github.com/WordPress/mcp-adapter) as the initial/default MCP transport
-- WP Native Builder Bridge as the project-specific capability and direct-ChatGPT authorization layer
-- current WordPress/PHP development baseline, with exact minimum PHP support finalized from tested compatibility
-- no required helper MCP/ability-pack plugins
-- no production runtime dependency on Node.js, Docker, Composer, a tunnel process, or an external identity provider
+## Uploads and extension installation
 
-A future compatible transport may replace MCP Adapter if evidence shows that is a better supported path, but the normal architecture should use one transport rather than stacking overlapping MCP server plugins.
+`wp-native-builder/media-upload` accepts file bytes plus a filename and hands them to WordPress Media Library handling. The maximum payload is the smaller of the WordPress upload limit and **20 MiB**. The caller cannot choose a server filesystem path.
 
-## Localization
+Plugin/theme installation is deliberately narrower: it accepts WordPress.org slugs through WordPress administration APIs. The Bridge does **not** expose arbitrary ZIP/PHP upload, arbitrary package URLs, shell commands, SQL, generic filesystem access, or credential retrieval.
 
-The plugin uses the WordPress text domain `wp-native-builder-bridge` and keeps user-facing strings translation-ready through WordPress gettext APIs. Bundled locale catalogs live under `languages/`; v0.1 ships a complete Persian (`fa_IR`) runtime catalog using WordPress's `.l10n.php` format. Additional locales can be added without changing the plugin's ability contracts or transport architecture.
+## Optional integrations
 
-Localization is validated both statically and in a real WordPress runtime. The Workspace/admin surfaces use the same text domain and remain RTL/LTR neutral.
+- **Astra / Astra Pro:** enable Astra's **Abilities** setting. A separate Astra MCP server is not required for this Bridge setup.
+- **Code Snippets:** compatible provider APIs are used for managed snippet lifecycle; the Bridge does not directly evaluate submitted code.
+- **Gravity Forms:** native provider Abilities are preferred; otherwise the bounded GFAPI fallback is used when available.
+- **WooCommerce:** verified provider Abilities may be reused. Broad commerce/customer/order fallbacks are not exposed automatically.
 
-## Persistent Workspace
+See [Integrations](./docs/INTEGRATIONS.md) for details.
 
-The first public release includes a small WordPress-hosted Persistent Workspace so fresh companion-Skill chats can resume durable site-project context without receiving old chat history. It uses dedicated `workspace-resume`, `workspace-document`, and `workspace-task` abilities plus a top-level WordPress administration area.
+## Security model
 
-Workspace uses private WordPress-native storage, dedicated typed abilities, explicit isolation from generic content/Gutenberg operations, and optimistic concurrency that does not depend on WordPress revision rows surviving. The first release does not expose a rollback/history feature; if durable rollback is added later, it must use bounded Bridge-managed history rather than silently depending on WordPress revision rows.
+The Bridge is intentionally not a general remote-administration shell. It combines:
 
-See [`docs/PROJECT-WORKSPACE-ARCHITECTURE.md`](./docs/PROJECT-WORKSPACE-ARCHITECTURE.md) and Issue #8 for the Bridge-side storage, concurrency, lifecycle, and validation contract.
+- WordPress OAuth identity;
+- WordPress capabilities and object-level checks;
+- explicit Bridge access groups;
+- closed input/output schemas;
+- stale-write protection for overwrite-sensitive operations;
+- bounded mutation logging;
+- provider-native permission checks where integrations are used.
 
-## Project map
+Read [Security](./docs/SECURITY.md) before enabling write or destructive access on an important site.
 
-| Source | Purpose |
-|---|---|
-| [`MASTER-SPEC.md`](./MASTER-SPEC.md) | Canonical project-level architecture, ability surface, permissions, reuse policy, constraints, and completion criteria |
-| [`docs/CORE-ABILITY-SAFETY-BOUNDARIES.md`](./docs/CORE-ABILITY-SAFETY-BOUNDARIES.md) | Canonical detailed v0.1 safety boundary for generic content/CPT eligibility, stale-write identity, destructive status/navigation rules, and verified Ability reuse |
-| [`docs/OPTIONAL-INTEGRATIONS-AND-ADMIN.md`](./docs/OPTIONAL-INTEGRATIONS-AND-ADMIN.md) | v0.1 provider reuse/fallback rules and bounded site settings, extensions, snippets, forms, users, and destructive administration |
-| [`docs/ABILITY-INVENTORY.md`](./docs/ABILITY-INVENTORY.md) | Complete v0.1 Bridge-owned Ability inventory, access-group/capability map, excluded generic surfaces, and optimistic-concurrency boundary |
-| [`docs/INSTALLATION-AND-CONNECTION.md`](./docs/INSTALLATION-AND-CONNECTION.md) | v0.1 installation, direct ChatGPT Workspace App OAuth connection, update/rollback, and uninstall behavior |
-| [`docs/TROUBLESHOOTING.md`](./docs/TROUBLESHOOTING.md) | Layered troubleshooting for direct MCP/OAuth, permissions, providers, stale writes, and local validation |
-| [`docs/RELEASE-CHECKLIST.md`](./docs/RELEASE-CHECKLIST.md) | Automated, OAuth/security, real-ChatGPT, metadata, license, and publication gates for v0.1 |
-| [`docs/PROJECT-WORKSPACE-ARCHITECTURE.md`](./docs/PROJECT-WORKSPACE-ARCHITECTURE.md) | Persistent Workspace storage, isolation, versioning, admin UX, and lifecycle architecture |
-| [Issue #1](https://github.com/ach1992/wp-native-builder-bridge/issues/1) | v0.1 program/outcome |
-| [Issue #2](https://github.com/ach1992/wp-native-builder-bridge/issues/2) | Plugin/MCP foundation and access controls |
-| [Issue #3](https://github.com/ach1992/wp-native-builder-bridge/issues/3) | Core WordPress/Gutenberg/media/navigation abilities and live implementation acceptance |
-| [Issue #4](https://github.com/ach1992/wp-native-builder-bridge/issues/4) | Astra/Gravity Forms/Code Snippets/advanced admin abilities |
-| [Issue #5](https://github.com/ach1992/wp-native-builder-bridge/issues/5) | Ability hardening, tests, and CI |
-| [Issue #6](https://github.com/ach1992/wp-native-builder-bridge/issues/6) | Direct ChatGPT App interoperability, docs, and v0.1 release |
-| [Issue #8](https://github.com/ach1992/wp-native-builder-bridge/issues/8) | Pre-release Persistent Workspace implementation and Bridge-local validation |
-| [`wp-native-builder`](https://github.com/ach1992/wp-native-builder) | Companion ChatGPT Skill |
+## Documentation
 
-## Development path
+- [Installation and connection](./docs/INSTALLATION.md)
+- [User guide](./docs/USER-GUIDE.md)
+- [Ability reference](./docs/ABILITIES.md)
+- [Integrations](./docs/INTEGRATIONS.md)
+- [Security](./docs/SECURITY.md)
+- [Architecture](./docs/ARCHITECTURE.md)
+- [Troubleshooting](./docs/TROUBLESHOOTING.md)
+- [Development and testing](./docs/DEVELOPMENT.md)
+- [Changelog](./CHANGELOG.md)
 
-```text
-#2 foundation + permissions
-  -> #3 ability reuse + core site-building abilities
-  -> #4 optional integrations + advanced admin
-  -> #5 contract/permission hardening + CI
-  -> #6 direct ChatGPT App OAuth + real interoperability + release preparation
-  -> #8 persistent Workspace storage + abilities + admin UX
-  -> #6 final exact-current validation + public v0.1 release gate
-```
+## License
 
-This sequence is intentionally small. Implementation should add abstractions only when repeated code or a real interoperability requirement earns the complexity.
+WP Native Builder Bridge is licensed under **GPL-2.0-or-later**. See [LICENSE](./LICENSE).
 
-## Development
+## Author
 
-Implementation and review state is tracked in the linked GitHub Issues and pull requests rather than duplicated in this README.
-
-The foundation has a dependency-free fast test runner:
-
-```bash
-php tests/run.php
-```
-
-For the complete local quality gate, install development-only tooling and run:
-
-```bash
-composer install
-composer check
-```
-
-`composer check` runs strict Composer package validation, PHP syntax checks, the dependency-free test suite, `WordPress-Core` plus `PHPCompatibilityWP` checks for the current PHP 8.4+ development baseline, Persian source/runtime catalog validation, the static safety-surface audit, and the installable ZIP validator. The resulting local package is `build/wp-native-builder-bridge.zip`. Composer and these quality tools are development dependencies only; they are not shipped in or required by the production plugin.
-
-The repository also contains a disposable Docker integration runner that builds the release ZIP, installs that ZIP into WordPress, installs the pinned official MCP Adapter `v0.6.1`, and then runs integration-only tests in isolated volumes:
-
-```bash
-bash bin/run-integration.sh 6.9-php8.4-apache
-bash bin/run-integration.sh php8.4-apache
-RUN_OPTIONAL_PROVIDERS=1 bash bin/run-integration.sh php8.4-apache
-```
-
-The integration lanes exercise the Adapter's default HTTP session contract, the Bridge direct OAuth endpoint (PKCE, resource binding, Bearer validation, refresh rotation, revocation, direct MCP initialize), the bundled Persian runtime catalog, raw STDIO MCP discovery/execution, Persistent Workspace isolation/concurrency/admin UX, and Workspace preservation across deactivate/uninstall.
-
-The optional-provider lane installs and exercises the explicitly tested Code Snippets `3.9.6` and `3.10.2` provider generations plus Astra `4.13.11`. Gravity Forms is represented in automated transport tests by an explicitly test-only GFAPI contract fixture; this is not a claim that the commercial binary is present. GitHub Actions runs the same quality and integration gates on pull requests and `main`.
-
-Disposable WordPress environments with the official MCP Adapter can also run individual integration checks through WP-CLI:
-
-```bash
-wp eval-file tests/integration/foundation-smoke.php --user=<administrator>
-wp eval-file tests/integration/issue3-content-block-smoke.php --user=<administrator>
-wp eval-file tests/integration/issue3-safety-regressions.php --user=<administrator>
-wp eval-file tests/integration/issue3-provider-smoke.php --user=<administrator>
-wp eval-file tests/integration/issue4-core-admin-smoke.php --user=<administrator>
-wp eval-file tests/integration/issue5-hardening-smoke.php --user=<administrator>
-wp eval-file tests/integration/issue6-http-transport-smoke.php --user=<administrator>
-wp eval-file tests/integration/issue6-direct-oauth-smoke.php --user=<administrator>
-wp eval-file tests/integration/issue6-i18n-smoke.php --user=<administrator>
-wp eval-file tests/integration/issue8-workspace-smoke.php --user=<administrator>
-```
-
-Optional provider fixtures have focused checks in `tests/integration/issue4-code-snippets-smoke.php` and `tests/integration/issue4-astra-reuse-smoke.php`. They are designed for disposable environments and skip cleanly when the relevant provider is unavailable. Astra's native Ability test assumes Astra is active and its own Abilities toggle is enabled; the Bridge never enables that setting itself.
-
-The production plugin does not require Node.js, Docker, Composer, a tunnel client, or an external identity-provider plugin at runtime.
+**ACh** — https://ach.li
