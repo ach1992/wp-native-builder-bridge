@@ -182,7 +182,7 @@ final class Block_Abilities {
 			}
 			$blocks[] = $new_block;
 		} else {
-			if ( empty( $input['path'] ) ) {
+			if ( ! isset( $input['path'] ) || ! is_string( $input['path'] ) || '' === $input['path'] ) {
 				return $this->logged_error( 'block_path_required', __( 'path is required for targeted block mutations.', 'wp-native-builder-bridge' ), $post_id );
 			}
 
@@ -304,7 +304,7 @@ final class Block_Abilities {
 	 * @return array<int,int>|WP_Error Numeric path or error.
 	 */
 	private function parse_path( $path ) {
-		if ( ! is_string( $path ) || ! preg_match( '/^\d+(?:\.\d+)*$/', $path ) ) {
+		if ( ! is_string( $path ) || ! preg_match( '/^(?:0|[1-9]\d*)(?:\.(?:0|[1-9]\d*))*$/', $path ) ) {
 			return new WP_Error( 'invalid_block_path', __( 'path must be a dot-separated numeric block path such as 0 or 1.2.', 'wp-native-builder-bridge' ) );
 		}
 		return array_map( 'intval', explode( '.', $path ) );
