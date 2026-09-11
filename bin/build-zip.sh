@@ -50,8 +50,6 @@ required=(
     "wp-native-builder-bridge/wp-native-builder-bridge.php"
     "wp-native-builder-bridge/uninstall.php"
     "wp-native-builder-bridge/LICENSE"
-    "wp-native-builder-bridge/languages/wp-native-builder-bridge.pot"
-    "wp-native-builder-bridge/languages/wp-native-builder-bridge-fa_IR.po"
     "wp-native-builder-bridge/languages/wp-native-builder-bridge-fa_IR.l10n.php"
     "wp-native-builder-bridge/src/class-plugin.php"
 )
