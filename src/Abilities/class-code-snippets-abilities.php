@@ -213,7 +213,7 @@ final class Code_Snippets_Abilities {
 				return new WP_Error( 'snippet_locked', __( 'The managed snippet is locked by Code Snippets and cannot be changed.', 'wp-native-builder-bridge' ) );
 			}
 
-			$snippet->name = sanitize_text_field( (string) $input['name'] );
+			$snippet->name  = sanitize_text_field( (string) $input['name'] );
 			$snippet->desc  = isset( $input['description'] ) ? wp_kses_post( (string) $input['description'] ) : '';
 			$snippet->code  = (string) $input['code'];
 			$snippet->tags  = isset( $input['tags'] ) ? array_map( 'sanitize_text_field', $input['tags'] ) : array();
