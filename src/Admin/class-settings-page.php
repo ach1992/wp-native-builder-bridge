@@ -233,7 +233,7 @@ final class Settings_Page {
 		<div class="wrap">
 			<h1><?php echo esc_html__( 'Tasks', 'wp-native-builder-bridge' ); ?></h1>
 			<p><?php echo esc_html__( 'Lightweight durable work state. Progress, review, and delivery are independent facts.', 'wp-native-builder-bridge' ); ?></p>
-			<form method="get">
+			<form method="get" style="margin: 16px 0 18px;">
 				<input type="hidden" name="page" value="<?php echo esc_attr( self::TASKS_SLUG ); ?>">
 				<label><?php echo esc_html__( 'Progress', 'wp-native-builder-bridge' ); ?> <select name="progress"><option value=""><?php echo esc_html__( 'Any', 'wp-native-builder-bridge' ); ?></option><?php $this->render_options( array( 'todo', 'in_progress', 'blocked', 'done' ), $filters['progress'] ); ?></select></label>
 				<label><?php echo esc_html__( 'Review', 'wp-native-builder-bridge' ); ?> <select name="review"><option value=""><?php echo esc_html__( 'Any', 'wp-native-builder-bridge' ); ?></option><?php $this->render_options( array( 'not_required', 'pending', 'changes_requested', 'approved' ), $filters['review'] ); ?></select></label>
