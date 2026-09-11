@@ -13,7 +13,16 @@ if ( class_exists( 'GFAPI' ) ) {
 
 final class GFAPI {
 	/** @var array<int,array<string,mixed>> */
-	private static $forms = array();
+	private static $forms = array(
+		100 => array(
+			'id'          => 100,
+			'title'       => 'WPNB GFAPI readable fixture',
+			'description' => 'Stable read fixture across isolated MCP CLI processes.',
+			'fields'      => array(),
+			'is_active'   => false,
+			'is_trash'    => false,
+		),
+	);
 	/** @var int */
 	private static $next_id = 1;
 

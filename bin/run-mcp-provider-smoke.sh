@@ -48,7 +48,7 @@ if "${wp[@]}" eval 'echo class_exists("GFAPI") ? "yes" : "no";' --allow-root | t
     run_mcp '{"jsonrpc":"2.0","id":105,"method":"tools/call","params":{"name":"mcp-adapter-execute-ability","arguments":{"ability_name":"wp-native-builder/gravity-form-upsert","parameters":{"action":"create","form":{"title":"WPNB GFAPI transport contract","description":"Test-only GFAPI contract fixture","fields":[]}}}}}'
     jq -e '.result.structuredContent.success == true and .result.structuredContent.data.form.title == "WPNB GFAPI transport contract"' "$output_file" >/dev/null
     run_mcp '{"jsonrpc":"2.0","id":106,"method":"tools/call","params":{"name":"mcp-adapter-execute-ability","arguments":{"ability_name":"wp-native-builder/gravity-forms-read","parameters":{"action":"list"}}}}'
-    jq -e '.result.structuredContent.success == true and (.result.structuredContent.data.items | any(.title == "WPNB GFAPI transport contract"))' "$output_file" > /dev/null
+    jq -e '.result.structuredContent.success == true and (.result.structuredContent.data.items | any(.title == "WPNB GFAPI readable fixture"))' "$output_file" > /dev/null
     echo "GFAPI create/read contract through raw MCP: PASS (commercial Gravity Forms binary not present)"
 fi
 
