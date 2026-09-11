@@ -2,11 +2,7 @@
 
 The default runtime is intentionally small: **WordPress MCP Adapter + WP Native Builder Bridge**. Optional plugins/themes remain normal site components, not additional AI infrastructure.
 
-For optional providers the Bridge follows this order:
-
-1. reuse a suitable stable provider Ability when one is registered;
-2. otherwise use a bounded fallback through a supported public provider API;
-3. otherwise report that integration surface as unavailable.
+The canonical integration policy is documented in [Architecture](./ARCHITECTURE.md#discovery-first-provider-architecture). In short, the Bridge discovers and reuses provider-owned Abilities first, uses a bounded public-API fallback only for a real gap, and otherwise reports the surface as unavailable. A newly installed plugin or theme that already exposes compatible public WordPress Abilities should normally require no Bridge source change.
 
 ## Astra / Astra Pro
 
@@ -37,7 +33,7 @@ The Bridge:
 
 If native `gravityforms/*` Abilities are registered, the Bridge defers to that provider surface and does not create a parallel fallback.
 
-When no native surface is registered and documented `GFAPI` is available, the bounded fallback can manage form definitions and form status. Entry/submission data is not part of this fallback.
+When no native surface is registered and documented `GFAPI` is available, the bounded fallback can manage form definitions and form status. Form-definition reads follow Gravity Forms' documented `gravityforms_edit_forms` capability contract; the provider does not define a separate read-only form capability. Entry/submission data is not part of this fallback.
 
 ## WooCommerce
 

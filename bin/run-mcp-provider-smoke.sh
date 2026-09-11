@@ -47,7 +47,9 @@ fi
 if "${wp[@]}" eval 'echo class_exists("GFAPI") ? "yes" : "no";' --allow-root | tail -n 1 | grep -Fxq yes; then
     run_mcp '{"jsonrpc":"2.0","id":105,"method":"tools/call","params":{"name":"mcp-adapter-execute-ability","arguments":{"ability_name":"wp-native-builder/gravity-form-upsert","parameters":{"action":"create","form":{"title":"WPNB GFAPI transport contract","description":"Test-only GFAPI contract fixture","fields":[]}}}}}'
     jq -e '.result.structuredContent.success == true and .result.structuredContent.data.form.title == "WPNB GFAPI transport contract"' "$output_file" >/dev/null
-    echo "GFAPI test contract through raw MCP: PASS (commercial Gravity Forms binary not present)"
+    run_mcp '{"jsonrpc":"2.0","id":106,"method":"tools/call","params":{"name":"mcp-adapter-execute-ability","arguments":{"ability_name":"wp-native-builder/gravity-forms-read","parameters":{"action":"list"}}}}'
+    jq -e '.result.structuredContent.success == true and (.result.structuredContent.data.items | any(.title == "WPNB GFAPI readable fixture"))' "$output_file" > /dev/null
+    echo "GFAPI create/read contract through raw MCP: PASS (commercial Gravity Forms binary not present)"
 fi
 
 "${wp[@]}" eval 'use WP_Native_Builder_Bridge\Support\Settings; $s=new Settings(); update_option(Settings::OPTION_NAME,$s->defaults(),false);' --user=1 --allow-root >/dev/null

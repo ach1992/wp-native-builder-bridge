@@ -110,7 +110,6 @@ if [[ "${RUN_OPTIONAL_PROVIDERS:-0}" == "1" ]]; then
     "${compose[@]}" exec -T wordpress mkdir -p /var/www/html/wp-content/mu-plugins
     "${compose[@]}" exec -T wordpress cp /var/www/html/wp-content/plugins/wp-native-builder-bridge/tests/fixtures/gravity-forms-contract.php /var/www/html/wp-content/mu-plugins/wpnb-gravity-forms-contract.php
     for capability in \
-        gravityforms_view_forms \
         gravityforms_create_form \
         gravityforms_edit_forms \
         gravityforms_delete_forms
