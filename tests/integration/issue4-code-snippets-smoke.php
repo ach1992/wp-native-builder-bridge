@@ -22,6 +22,10 @@ if ( ! wp_get_ability( 'wp-native-builder/snippets-read' ) ) {
 	return;
 }
 
+$integration_status = wpnb_issue4_snippet_execute( 'wp-native-builder/integration-status', array() );
+wpnb_issue4_snippet_assert( ! empty( $integration_status['code_snippets']['installed'] ), 'Active Code Snippets provider is not detected as installed.' );
+wpnb_issue4_snippet_assert( 'api_fallback' === $integration_status['code_snippets']['mode'], 'Supported Code Snippets provider is not reported through the API fallback.' );
+
 $settings = new Settings();
 $original = get_option( Settings::OPTION_NAME, $settings->defaults() );
 $snippet_id = 0;

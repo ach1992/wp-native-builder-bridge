@@ -66,7 +66,7 @@ final class Integration_Abilities {
 			),
 			'gravity_forms' => $this->provider( class_exists( 'GFAPI' ), defined( 'GF_VERSION' ) ? (string) GF_VERSION : '', 'gravityforms/', class_exists( 'GFAPI' ) && ! $this->registered_provider_present( 'gravityforms/' ) ),
 			'code_snippets' => $this->provider(
-				class_exists( 'Code_Snippets\\Model\\Snippet' ) && function_exists( 'Code_Snippets\\get_snippets' ),
+				$this->code_snippets_model_available() && function_exists( 'Code_Snippets\\get_snippets' ),
 				defined( 'Code_Snippets\\PLUGIN_VERSION' ) ? (string) constant( 'Code_Snippets\\PLUGIN_VERSION' ) : '',
 				'',
 				$this->code_snippets_api_available()
@@ -139,6 +139,11 @@ final class Integration_Abilities {
 	}
 
 	/** @return bool */
+	private function code_snippets_model_available() {
+		return class_exists( 'Code_Snippets\\Model\\Snippet' ) || class_exists( 'Code_Snippets\\Snippet' );
+	}
+
+	/** @return bool */
 	private function code_snippets_api_available() {
 		$functions = array(
 			'Code_Snippets\\code_snippets',
@@ -151,7 +156,7 @@ final class Integration_Abilities {
 			'Code_Snippets\\restore_snippet',
 			'Code_Snippets\\delete_snippet',
 		);
-		if ( ! class_exists( 'Code_Snippets\\Model\\Snippet' ) ) {
+		if ( ! $this->code_snippets_model_available() ) {
 			return false;
 		}
 		foreach ( $functions as $function ) {
