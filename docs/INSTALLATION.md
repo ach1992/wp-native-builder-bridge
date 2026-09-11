@@ -68,7 +68,7 @@ Upload the new release ZIP from **Plugins → Add Plugin → Upload Plugin** and
 
 Deactivation stops Bridge execution but preserves its configuration and Workspace data.
 
-Uninstall removes Bridge settings, OAuth tokens/authorizations, and bounded activity-log configuration. Persistent Workspace content is intentionally preserved so uninstalling the transport plugin does not silently destroy project state.
+Uninstall removes Bridge settings and activity-log configuration, removes Bridge-owned OAuth metadata, and invalidates outstanding Bridge OAuth artifacts. Persistent Workspace content is intentionally preserved so uninstalling the transport plugin does not silently destroy project state.
 
 If Workspace data is no longer wanted, clear it explicitly from **WP Native Builder** before uninstalling.
 
