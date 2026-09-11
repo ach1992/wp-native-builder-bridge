@@ -229,6 +229,9 @@ try {
 		$page->{$method}();
 		$screen_html = ob_get_clean();
 		wpnb_issue8_assert( false !== strpos( $screen_html, $needle ), 'Admin screen did not render expected content: ' . $method );
+		if ( 'render_tasks' === $method ) {
+			wpnb_issue8_assert( false !== strpos( $screen_html, 'style="margin: 16px 0 18px;"' ), 'Task filters should retain vertical spacing from the description and results table.' );
+		}
 	}
 
 	ob_start();
