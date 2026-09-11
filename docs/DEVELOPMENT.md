@@ -1,5 +1,14 @@
 # Development and testing
 
+## Project continuity
+
+Before changing durable architecture or resuming development after a long gap, read:
+
+- [`../MASTER-SPEC.md`](../MASTER-SPEC.md) for canonical project intent and durable constraints;
+- [`maintainer/README.md`](./maintainer/README.md) for the recovery/source-of-truth map and preserved design references.
+
+Do not reconstruct active work from old chats or historical reference files. Current source/tests, GitHub Issues/PRs, CI, and Releases own mutable implementation/project state.
+
 ## Local quality gate
 
 Install development dependencies and run:
@@ -51,11 +60,12 @@ src/Workspace/   private durable Workspace storage
 languages/       bundled WordPress translation catalog
 tests/           fast and integration tests
 bin/             development/build/test helpers
+docs/maintainer/ recovery map and preserved design references
 ```
 
 ## Release process
 
-1. update the plugin version and changelog;
+1. update the plugin version and changelog when a new plugin build is being released;
 2. run `composer check`;
 3. run both WordPress integration lanes, including optional providers;
 4. merge only after exact-head CI is green;
@@ -63,4 +73,6 @@ bin/             development/build/test helpers
 6. create an immutable Git tag and GitHub Release for that commit;
 7. attach the validated ZIP and verify its checksum/metadata.
 
-Do not force-move a published version tag. Use a patch release for post-publication changes.
+Do not force-move a published version tag. Use a patch release for post-publication plugin-package changes.
+
+Repository-only documentation/maintainer updates do not require a plugin version bump unless they change the shipped plugin package or published product contract.
