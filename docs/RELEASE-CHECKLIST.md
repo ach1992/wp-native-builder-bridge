@@ -4,8 +4,7 @@ This is the release gate for Issue #6. Do not publish/tag merely because impleme
 
 ## Automated technical gates
 
-- [ ] `composer check` passes.
-- [ ] `composer validate --strict` passes after the owner-selected license is added to repository/package metadata.
+- [ ] `composer check` passes, including strict Composer package validation.
 - [ ] WordPress 6.9.x / PHP 8.4 integration lane passes.
 - [ ] current stable WordPress / PHP 8.4 integration lane passes.
 - [ ] official MCP Adapter v0.6.1 installs and the Bridge installs from the generated ZIP.
@@ -24,6 +23,8 @@ This is the release gate for Issue #6. Do not publish/tag merely because impleme
 - [ ] OAuth-authenticated direct MCP `initialize` passes.
 - [ ] raw STDIO MCP `tools/list -> discover -> get-info -> execute` remains working for non-ChatGPT/local clients.
 - [ ] representative raw MCP draft, Gutenberg mutation, publish gate, media, site configuration, and administration-read workflow passes.
+- [ ] bundled Persian (`fa_IR`) catalog covers the literal production gettext strings and loads through WordPress at runtime.
+- [ ] real Code Snippets 3.9.6 provider lane passes.
 - [ ] real Code Snippets 3.10.2 provider lane passes.
 - [ ] real Astra 4.13.11 native Ability reuse lane passes.
 - [ ] Gravity Forms GFAPI transport contract fixture passes and is explicitly reported as a contract fixture, not commercial-binary validation.
@@ -43,7 +44,7 @@ This is the release gate for Issue #6. Do not publish/tag merely because impleme
 - [ ] ChatGPT can create/read a draft and perform a targeted Gutenberg mutation on a disposable test object.
 - [ ] ChatGPT correctly receives denial when a required Bridge access group is disabled.
 - [ ] If live-content testing is approved, a disposable live-content transition is performed and rolled back/removed.
-- [ ] Owner chooses the Bridge license. Do not infer it from the companion Skill or another repository.
+- [x] Owner selected `GPL-2.0-or-later` for the Bridge.
 - [ ] Owner explicitly authorizes the public v0.1.0 tag/release after reviewing the license and final evidence.
 
 ## OAuth/security gate
@@ -62,16 +63,25 @@ This is the release gate for Issue #6. Do not publish/tag merely because impleme
 - [ ] Bridge access groups and WordPress capability checks remain independent from OAuth transport authentication.
 - [ ] No OpenAI key, WordPress password/Application Password, OAuth bearer token, refresh token, authorization code, private URL, or other secret is committed, included in release notes, or written to Bridge mutation logs.
 
+## Localization gate
+
+- [ ] Plugin metadata declares `Text Domain: wp-native-builder-bridge` and `Domain Path: /languages`.
+- [ ] all user-facing v0.1 production strings remain wrapped in WordPress gettext APIs.
+- [ ] the bundled `fa_IR` catalog has no empty translations and covers all literal production gettext source strings.
+- [ ] representative admin settings, access-group, OAuth consent, and OAuth error strings render from the bundled Persian catalog in a real WordPress runtime.
+- [ ] localization files are included in the installable ZIP and no translation build tooling is required at runtime.
+- [ ] UI remains RTL/LTR neutral; no release-specific layout assumes an LTR locale.
+
 ## Release metadata gate
 
 Before final v0.1.0 packaging:
 
 - change plugin header/version constant from `0.1.0-dev` to `0.1.0`;
-- add owner-selected license file/header/package metadata;
+- include the owner-selected GPL-2.0-or-later license file/header/package metadata;
 - run strict Composer validation;
 - rebuild the ZIP from the exact release candidate;
 - run exact-candidate CI again;
-- verify the ZIP contains runtime files only plus required README/license/uninstall metadata;
+- verify the ZIP contains runtime files only plus required README/license/uninstall/localization metadata;
 - record the final ZIP digest;
 - tag/release only after explicit owner authorization.
 
