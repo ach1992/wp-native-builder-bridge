@@ -54,19 +54,21 @@ final class Post_Meta_Store {
 			if ( is_object( $meta ) ) {
 				$meta = get_object_vars( $meta );
 			}
-			if ( ! is_array( $meta ) || ! isset( $meta['meta_id'], $meta['post_id'], $meta['meta_key'] ) ) {
+			if ( ! is_array( $meta ) || ! isset( $meta['meta_id'], $meta['post_id'], $meta['meta_key'] ) || ! array_key_exists( 'meta_value', $meta ) ) {
 				continue;
 			}
 			$meta_key = (string) $meta['meta_key'];
 			if ( null !== $key && $meta_key !== (string) $key ) {
 				continue;
 			}
-			$raw_value = isset( $meta['meta_value'] ) ? $meta['meta_value'] : '';
+			$raw_value = $meta['meta_value'];
 			if ( ! is_scalar( $raw_value ) && null !== $raw_value ) {
 				return new WP_Error( 'post_meta_physical_state_unavailable', __( 'Physical post metadata state could not be established safely.', 'wp-native-builder-bridge' ) );
 			}
-			$raw_value = null === $raw_value ? '' : (string) $raw_value;
-			$rows[]    = array(
+			if ( null !== $raw_value ) {
+				$raw_value = (string) $raw_value;
+			}
+			$rows[] = array(
 				'meta_id'   => (int) $meta['meta_id'],
 				'post_id'   => (int) $meta['post_id'],
 				'key'       => $meta_key,
@@ -88,10 +90,13 @@ final class Post_Meta_Store {
 	/**
 	 * Prepares a JSON-decoded value exactly as WordPress stores post metadata.
 	 *
+	 * Existing-row direct persistence needs to run the same sanitizer Core would run.
+	 * Creation does not call this method because add_post_meta() owns its one sanitizer pass.
+	 *
 	 * @param int    $post_id Post ID.
 	 * @param string $key     Exact unslashed key.
 	 * @param mixed  $value   Canonical unslashed value.
-	 * @return array{value:mixed,raw_value:string}
+	 * @return array{value:mixed,raw_value:string|null}
 	 */
 	public function prepare_value( $post_id, $key, $value ) {
 		$subtype = function_exists( 'get_object_subtype' ) ? get_object_subtype( 'post', (int) $post_id ) : '';
@@ -99,29 +104,81 @@ final class Post_Meta_Store {
 			$value = sanitize_meta( (string) $key, $value, 'post', $subtype );
 		}
 
-		$raw_value = maybe_serialize( $value );
-		if ( null === $raw_value || false === $raw_value ) {
-			$raw_value = '';
-		} elseif ( true === $raw_value ) {
-			$raw_value = '1';
-		} elseif ( ! is_string( $raw_value ) ) {
-			$raw_value = (string) $raw_value;
+		return $this->stored_value( $value );
+	}
+
+	/**
+	 * Creates through Core while capturing the exact once-sanitized value Core attempted to store.
+	 *
+	 * The capture filter never changes Core's decision or value. It only observes the already
+	 * sanitized value after Core has unslashed and sanitized it, avoiding a second sanitizer pass.
+	 *
+	 * @param int    $post_id Post ID.
+	 * @param string $key     Exact unslashed key.
+	 * @param mixed  $value   Canonical unslashed input value.
+	 * @return array{result:mixed,expected_row:array<string,mixed>}|WP_Error
+	 */
+	public function create_unique_row( $post_id, $key, $value ) {
+		$post_id = (int) $post_id;
+		$key     = (string) $key;
+
+		if ( $this->is_test_mode() ) {
+			$result   = add_post_meta( $post_id, $key, $value, true );
+			$prepared = $this->stored_value( $value );
+			return array(
+				'result'       => $result,
+				'expected_row' => array(
+					'meta_id'   => is_int( $result ) ? $result : 0,
+					'post_id'   => $post_id,
+					'key'       => $key,
+					'raw_value' => $prepared['raw_value'],
+					'value'     => $prepared['value'],
+				),
+			);
 		}
 
+		$captured       = false;
+		$sanitized      = null;
+		$capture_filter = static function ( $check, $object_id, $meta_key, $meta_value, $unique ) use ( $post_id, $key, &$captured, &$sanitized ) {
+			if ( (int) $object_id === $post_id && (string) $meta_key === $key && true === (bool) $unique ) {
+				$captured  = true;
+				$sanitized = $meta_value;
+			}
+			return $check;
+		};
+
+		add_filter( 'add_post_metadata', $capture_filter, PHP_INT_MAX, 5 );
+		try {
+			$result = add_post_meta( $post_id, wp_slash( $key ), wp_slash( $value ), true );
+		} finally {
+			remove_filter( 'add_post_metadata', $capture_filter, PHP_INT_MAX );
+		}
+
+		if ( ! $captured ) {
+			return new WP_Error( 'post_meta_physical_state_unavailable', __( 'Physical post metadata state could not be established safely.', 'wp-native-builder-bridge' ) );
+		}
+
+		$prepared = $this->stored_value( $sanitized );
 		return array(
-			'value'     => $value,
-			'raw_value' => $raw_value,
+			'result'       => $result,
+			'expected_row' => array(
+				'meta_id'   => is_int( $result ) ? $result : 0,
+				'post_id'   => $post_id,
+				'key'       => $key,
+				'raw_value' => $prepared['raw_value'],
+				'value'     => $prepared['value'],
+			),
 		);
 	}
 
 	/**
-	 * Replaces one exact physical row with compare-and-swap semantics.
+	 * Replaces one exact physical row with byte-exact compare-and-swap semantics.
 	 *
-	 * @param int                 $post_id Post ID.
-	 * @param string              $key     Exact unslashed key.
-	 * @param array<string,mixed> $row     Previously inspected physical row.
+	 * @param int                 $post_id  Post ID.
+	 * @param string              $key      Exact unslashed key.
+	 * @param array<string,mixed> $row      Previously inspected physical row.
 	 * @param array<string,mixed> $prepared Sanitized value and exact raw storage representation.
-	 * @return array{value:mixed,raw_value:string}|WP_Error
+	 * @return array{value:mixed,raw_value:string|null}|WP_Error
 	 */
 	public function replace_row( $post_id, $key, array $row, array $prepared ) {
 		if ( $this->is_test_mode() ) {
@@ -142,24 +199,15 @@ final class Post_Meta_Store {
 			return new WP_Error( 'post_meta_atomic_mutation_unsupported', __( 'WordPress cannot condition this metadata value atomically. The generic Bridge refuses the mutation to avoid a stale write.', 'wp-native-builder-bridge' ) );
 		}
 
-		global $wpdb;
 		$meta_id = (int) $row['meta_id'];
 		do_action( 'update_post_meta', $meta_id, (int) $post_id, (string) $key, $prepared['value'] );
 		do_action( 'update_postmeta', $meta_id, (int) $post_id, (string) $key, $prepared['raw_value'] );
 
-		$result = $wpdb->update(
-			$wpdb->postmeta,
-			array( 'meta_value' => $prepared['raw_value'] ),
-			array(
-				'meta_id'    => $meta_id,
-				'post_id'    => (int) $post_id,
-				'meta_key'   => (string) $key,
-				'meta_value' => (string) $row['raw_value'],
-			),
-			array( '%s' ),
-			array( '%d', '%d', '%s', '%s' )
-		);
-
+		$result = $this->exact_update_raw_row( $meta_id, (int) $post_id, (string) $key, $row['raw_value'], $prepared['raw_value'] );
+		if ( false === $result ) {
+			wp_cache_delete( (int) $post_id, 'post_meta' );
+			return new WP_Error( 'post_meta_update_failed', __( 'WordPress could not update the requested metadata key.', 'wp-native-builder-bridge' ) );
+		}
 		if ( 1 !== $result ) {
 			wp_cache_delete( (int) $post_id, 'post_meta' );
 			return new WP_Error( 'stale_post_meta_conflict', __( 'Post metadata changed after it was read. Refresh the metadata state before updating it.', 'wp-native-builder-bridge' ) );
@@ -172,7 +220,7 @@ final class Post_Meta_Store {
 	}
 
 	/**
-	 * Deletes one exact physical row with compare-and-swap semantics.
+	 * Deletes one exact physical row with byte-exact compare-and-swap semantics.
 	 *
 	 * @param int                 $post_id Post ID.
 	 * @param string              $key     Exact unslashed key.
@@ -197,28 +245,25 @@ final class Post_Meta_Store {
 			return new WP_Error( 'post_meta_atomic_mutation_unsupported', __( 'WordPress cannot condition this metadata value atomically. The generic Bridge refuses the mutation to avoid a stale write.', 'wp-native-builder-bridge' ) );
 		}
 
-		global $wpdb;
 		$meta_id  = (int) $row['meta_id'];
 		$meta_ids = array( $meta_id );
 		do_action( 'delete_post_meta', $meta_ids, (int) $post_id, (string) $key, $row['value'] );
 		do_action( 'delete_postmeta', $meta_ids );
 
-		$result = $wpdb->delete(
-			$wpdb->postmeta,
-			array(
-				'meta_id'    => $meta_id,
-				'post_id'    => (int) $post_id,
-				'meta_key'   => (string) $key,
-				'meta_value' => (string) $row['raw_value'],
-			),
-			array( '%d', '%d', '%s', '%s' )
-		);
+		$result = $this->exact_delete_raw_row( $meta_id, (int) $post_id, (string) $key, $row['raw_value'] );
+		if ( false === $result ) {
+			wp_cache_delete( (int) $post_id, 'post_meta' );
+			return new WP_Error( 'post_meta_delete_failed', __( 'WordPress could not delete the requested metadata key.', 'wp-native-builder-bridge' ) );
+		}
 		if ( 1 !== $result ) {
 			wp_cache_delete( (int) $post_id, 'post_meta' );
 			return new WP_Error( 'stale_post_meta_conflict', __( 'Post metadata changed after it was read. Refresh the metadata state before deleting it.', 'wp-native-builder-bridge' ) );
 		}
 
 		wp_cache_delete( (int) $post_id, 'post_meta' );
+		do_action( 'deleted_post_meta', $meta_ids, (int) $post_id, (string) $key, $row['value'] );
+		do_action( 'deleted_postmeta', $meta_ids );
+
 		$after = $this->rows( $post_id, $key );
 		if ( is_wp_error( $after ) ) {
 			if ( ! $this->restore_deleted_row( $row ) ) {
@@ -233,13 +278,11 @@ final class Post_Meta_Store {
 			return new WP_Error( 'stale_post_meta_conflict', __( 'Post metadata changed after it was read. Refresh the metadata state before deleting it.', 'wp-native-builder-bridge' ) );
 		}
 
-		do_action( 'deleted_post_meta', $meta_ids, (int) $post_id, (string) $key, $row['value'] );
-		do_action( 'deleted_postmeta', $meta_ids );
 		return true;
 	}
 
 	/**
-	 * Restores one row after a detected concurrent mutation.
+	 * Restores one deleted row and emits the matching add lifecycle when compensation succeeds.
 	 *
 	 * @param array<string,mixed> $row Previously inspected physical row.
 	 * @return bool
@@ -250,25 +293,33 @@ final class Post_Meta_Store {
 		}
 
 		global $wpdb;
+		do_action( 'add_post_meta', (int) $row['post_id'], (string) $row['key'], $row['value'] );
 		$result = $wpdb->insert(
 			$wpdb->postmeta,
 			array(
 				'meta_id'    => (int) $row['meta_id'],
 				'post_id'    => (int) $row['post_id'],
 				'meta_key'   => (string) $row['key'],
-				'meta_value' => (string) $row['raw_value'],
+				'meta_value' => $row['raw_value'],
 			),
 			array( '%d', '%d', '%s', '%s' )
 		);
+		if ( 1 !== $result ) {
+			wp_cache_delete( (int) $row['post_id'], 'post_meta' );
+			return false;
+		}
 		wp_cache_delete( (int) $row['post_id'], 'post_meta' );
-		return 1 === $result;
+		do_action( 'added_post_meta', (int) $row['meta_id'], (int) $row['post_id'], (string) $row['key'], $row['value'] );
+		return true;
 	}
 
 	/**
-	 * Rolls back only the row changed by this invocation.
+	 * Rolls back only the row changed by this invocation and emits an update lifecycle
+	 * that reflects the restored final value. Short-circuit filters do not veto integrity
+	 * compensation after the Bridge has already committed its first exact mutation.
 	 *
 	 * @param array<string,mixed> $row              Original physical row.
-	 * @param string              $expected_new_raw Raw value written by this invocation.
+	 * @param string|null         $expected_new_raw Raw value written by this invocation.
 	 * @return bool
 	 */
 	public function restore_updated_row( array $row, $expected_new_raw ) {
@@ -276,47 +327,53 @@ final class Post_Meta_Store {
 			return false !== update_post_meta( (int) $row['post_id'], (string) $row['key'], $row['value'] );
 		}
 
-		global $wpdb;
-		$result = $wpdb->update(
-			$wpdb->postmeta,
-			array( 'meta_value' => (string) $row['raw_value'] ),
-			array(
-				'meta_id'    => (int) $row['meta_id'],
-				'post_id'    => (int) $row['post_id'],
-				'meta_key'   => (string) $row['key'],
-				'meta_value' => (string) $expected_new_raw,
-			),
-			array( '%s' ),
-			array( '%d', '%d', '%s', '%s' )
-		);
+		$meta_id = (int) $row['meta_id'];
+		do_action( 'update_post_meta', $meta_id, (int) $row['post_id'], (string) $row['key'], $row['value'] );
+		do_action( 'update_postmeta', $meta_id, (int) $row['post_id'], (string) $row['key'], $row['raw_value'] );
+
+		$result = $this->exact_update_raw_row( $meta_id, (int) $row['post_id'], (string) $row['key'], $expected_new_raw, $row['raw_value'] );
+		if ( 1 !== $result ) {
+			wp_cache_delete( (int) $row['post_id'], 'post_meta' );
+			return false;
+		}
 		wp_cache_delete( (int) $row['post_id'], 'post_meta' );
-		return 1 === $result;
+		do_action( 'updated_post_meta', $meta_id, (int) $row['post_id'], (string) $row['key'], $row['value'] );
+		do_action( 'updated_postmeta', $meta_id, (int) $row['post_id'], (string) $row['key'], $row['raw_value'] );
+		return true;
 	}
 
 	/**
-	 * Removes only the row created by this invocation during create-race cleanup.
+	 * Removes only an unchanged row created by this invocation during create-race cleanup.
 	 *
-	 * @param array<string,mixed> $row Physical row created by this invocation.
-	 * @return bool
+	 * @param array<string,mixed> $row Expected physical row created by this invocation.
+	 * @return true|WP_Error
 	 */
 	public function cleanup_created_row( array $row ) {
 		if ( $this->is_test_mode() ) {
-			return delete_post_meta( (int) $row['post_id'], (string) $row['key'], $row['value'] );
+			return delete_post_meta( (int) $row['post_id'], (string) $row['key'], $row['value'] )
+				? true
+				: new WP_Error( 'post_meta_compensation_failed', __( 'Concurrent metadata changed during mutation and the Bridge could not restore its exact physical row safely.', 'wp-native-builder-bridge' ) );
 		}
 
-		global $wpdb;
-		$result = $wpdb->delete(
-			$wpdb->postmeta,
-			array(
-				'meta_id'    => (int) $row['meta_id'],
-				'post_id'    => (int) $row['post_id'],
-				'meta_key'   => (string) $row['key'],
-				'meta_value' => (string) $row['raw_value'],
-			),
-			array( '%d', '%d', '%s', '%s' )
-		);
+		$meta_id  = (int) $row['meta_id'];
+		$meta_ids = array( $meta_id );
+		do_action( 'delete_post_meta', $meta_ids, (int) $row['post_id'], (string) $row['key'], $row['value'] );
+		do_action( 'delete_postmeta', $meta_ids );
+
+		$result = $this->exact_delete_raw_row( $meta_id, (int) $row['post_id'], (string) $row['key'], $row['raw_value'] );
+		if ( false === $result ) {
+			wp_cache_delete( (int) $row['post_id'], 'post_meta' );
+			return new WP_Error( 'post_meta_compensation_failed', __( 'Concurrent metadata changed during mutation and the Bridge could not restore its exact physical row safely.', 'wp-native-builder-bridge' ) );
+		}
+		if ( 1 !== $result ) {
+			wp_cache_delete( (int) $row['post_id'], 'post_meta' );
+			return new WP_Error( 'stale_post_meta_conflict', __( 'Post metadata changed after it was read. Refresh the metadata state before updating it.', 'wp-native-builder-bridge' ) );
+		}
+
 		wp_cache_delete( (int) $row['post_id'], 'post_meta' );
-		return 1 === $result;
+		do_action( 'deleted_post_meta', $meta_ids, (int) $row['post_id'], (string) $row['key'], $row['value'] );
+		do_action( 'deleted_postmeta', $meta_ids );
+		return true;
 	}
 
 	/**
@@ -327,10 +384,101 @@ final class Post_Meta_Store {
 	 * @return bool
 	 */
 	public function row_matches( array $left, array $right ) {
-		return (int) $left['meta_id'] === (int) $right['meta_id']
+		return array_key_exists( 'raw_value', $left )
+			&& array_key_exists( 'raw_value', $right )
+			&& (int) $left['meta_id'] === (int) $right['meta_id']
 			&& (int) $left['post_id'] === (int) $right['post_id']
 			&& (string) $left['key'] === (string) $right['key']
-			&& (string) $left['raw_value'] === (string) $right['raw_value'];
+			&& $left['raw_value'] === $right['raw_value'];
+	}
+
+	/**
+	 * Converts an already-sanitized WordPress metadata value to its exact DB representation.
+	 *
+	 * @param mixed $value Sanitized metadata value.
+	 * @return array{value:mixed,raw_value:string|null}
+	 */
+	private function stored_value( $value ) {
+		$raw_value = maybe_serialize( $value );
+		if ( null === $raw_value ) {
+			return array(
+				'value'     => $value,
+				'raw_value' => null,
+			);
+		}
+		if ( false === $raw_value ) {
+			$raw_value = '';
+		} elseif ( true === $raw_value ) {
+			$raw_value = '1';
+		} elseif ( ! is_string( $raw_value ) ) {
+			$raw_value = (string) $raw_value;
+		}
+
+		return array(
+			'value'     => $value,
+			'raw_value' => $raw_value,
+		);
+	}
+
+	/**
+	 * Performs one fixed-schema byte-exact row update.
+	 *
+	 * @param int         $meta_id      Physical meta ID.
+	 * @param int         $post_id      Post ID.
+	 * @param string      $key          Exact key.
+	 * @param string|null $expected_raw Expected old raw storage.
+	 * @param string|null $new_raw      New raw storage.
+	 * @return int|false
+	 */
+	private function exact_update_raw_row( $meta_id, $post_id, $key, $expected_raw, $new_raw ) {
+		global $wpdb;
+
+		$set_sql  = null === $new_raw ? 'meta_value = NULL' : 'meta_value = %s';
+		$raw_sql  = null === $expected_raw ? 'meta_value IS NULL' : 'CAST(meta_value AS BINARY) = CAST(%s AS BINARY)';
+		$sql      = "UPDATE %i SET {$set_sql} WHERE meta_id = %d AND post_id = %d AND CAST(meta_key AS BINARY) = CAST(%s AS BINARY) AND {$raw_sql}";
+		$sql_args = array( $wpdb->postmeta );
+		if ( null !== $new_raw ) {
+			$sql_args[] = $new_raw;
+		}
+		$sql_args[] = (int) $meta_id;
+		$sql_args[] = (int) $post_id;
+		$sql_args[] = (string) $key;
+		if ( null !== $expected_raw ) {
+			$sql_args[] = $expected_raw;
+		}
+
+		$prepared_sql = $wpdb->prepare( $sql, $sql_args );
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- Fixed-purpose byte-exact wp_postmeta CAS.
+		return $wpdb->query( $prepared_sql );
+	}
+
+	/**
+	 * Performs one fixed-schema byte-exact row delete.
+	 *
+	 * @param int         $meta_id      Physical meta ID.
+	 * @param int         $post_id      Post ID.
+	 * @param string      $key          Exact key.
+	 * @param string|null $expected_raw Expected raw storage.
+	 * @return int|false
+	 */
+	private function exact_delete_raw_row( $meta_id, $post_id, $key, $expected_raw ) {
+		global $wpdb;
+
+		$raw_sql  = null === $expected_raw ? 'meta_value IS NULL' : 'CAST(meta_value AS BINARY) = CAST(%s AS BINARY)';
+		$sql      = "DELETE FROM %i WHERE meta_id = %d AND post_id = %d AND CAST(meta_key AS BINARY) = CAST(%s AS BINARY) AND {$raw_sql}";
+		$sql_args = array(
+			$wpdb->postmeta,
+			(int) $meta_id,
+			(int) $post_id,
+			(string) $key,
+		);
+		if ( null !== $expected_raw ) {
+			$sql_args[] = $expected_raw;
+		}
+
+		$prepared_sql = $wpdb->prepare( $sql, $sql_args );
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- Fixed-purpose byte-exact wp_postmeta CAS.
+		return $wpdb->query( $prepared_sql );
 	}
 
 	/** @return bool */
@@ -354,19 +502,12 @@ final class Post_Meta_Store {
 				continue;
 			}
 			foreach ( (array) $values as $index => $value ) {
-				$raw_value = maybe_serialize( $value );
-				if ( null === $raw_value || false === $raw_value ) {
-					$raw_value = '';
-				} elseif ( true === $raw_value ) {
-					$raw_value = '1';
-				} elseif ( ! is_string( $raw_value ) ) {
-					$raw_value = (string) $raw_value;
-				}
+				$stored = $this->stored_value( $value );
 				$rows[] = array(
 					'meta_id'   => abs( crc32( $post_id . "\0" . $meta_key . "\0" . $index ) ) + 1,
 					'post_id'   => (int) $post_id,
 					'key'       => (string) $meta_key,
-					'raw_value' => $raw_value,
+					'raw_value' => $stored['raw_value'],
 					'value'     => $value,
 				);
 			}
