@@ -71,12 +71,12 @@ try {
 		}
 	}
 	sort( $names );
-	wpnb_issue5_assert( 30 === count( $names ), 'Baseline Bridge registry must contain exactly 30 abilities without optional provider fallbacks.' );
-	wpnb_issue5_assert( 30 === count( array_unique( $names ) ), 'Bridge ability names are not unique.' );
+	wpnb_issue5_assert( 33 === count( $names ), 'Baseline Bridge registry must contain exactly 33 abilities without optional provider fallbacks.' );
+	wpnb_issue5_assert( 33 === count( array_unique( $names ) ), 'Bridge ability names are not unique.' );
 
 	$defaults = $settings->defaults();
 	wpnb_issue5_assert( 1 === $defaults[ Settings::GROUP_SITE_READ ], 'Site Read is not the sole enabled default group.' );
-	foreach ( array( Settings::GROUP_BUILDER_WRITE, Settings::GROUP_LIVE_CONTENT, Settings::GROUP_SITE_CONFIG, Settings::GROUP_CODE_EXTENSIONS, Settings::GROUP_USERS_DESTRUCTIVE ) as $group ) {
+	foreach ( array( Settings::GROUP_BUILDER_WRITE, Settings::GROUP_LIVE_CONTENT, Settings::GROUP_SITE_CONFIG, Settings::GROUP_ADVANCED_METADATA, Settings::GROUP_CODE_EXTENSIONS, Settings::GROUP_USERS_DESTRUCTIVE ) as $group ) {
 		wpnb_issue5_assert( 0 === $defaults[ $group ], 'Sensitive group is enabled by default: ' . $group );
 	}
 	update_option( Settings::OPTION_NAME, $defaults, false );

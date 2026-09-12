@@ -16,6 +16,9 @@ The baseline installation registers the core Bridge surfaces below. Optional Gra
 | `revision-restore` | Builder Write | Restore a revision with stale-state checks. |
 | `blocks-read` | Site Read | Parse Gutenberg blocks for eligible content. |
 | `blocks-mutate` | Builder Write | Targeted Gutenberg append/insert/replace/remove with stale-state protection. |
+| `post-meta-read` | Advanced Metadata | Discover physical post-meta keys or read one exact physical key for a WordPress post object the connected user may edit. Values are returned only for an explicitly named key. |
+| `post-meta-update` | Advanced Metadata | Create/replace one single-value post-meta key with exact physical-row state identity and stale-write protection. Ambiguous or non-lossless cases fail closed. |
+| `post-meta-delete` | Advanced Metadata + Users & Destructive | Delete one single-value post-meta row with exact physical-row state identity and row-scoped stale-write protection. |
 | `media-read` | Site Read | Read Media Library attachments. |
 | `media-upload` | Builder Write | Upload bounded file bytes through WordPress Media APIs. |
 | `media-update` | Builder Write | Update bounded attachment metadata/parent. |
@@ -36,6 +39,28 @@ The baseline installation registers the core Bridge surfaces below. Optional Gra
 | `workspace-resume` | Site Read | Return compact durable Workspace orientation. |
 | `workspace-document` | Site Read / Builder Write | List/read/create/update/archive private Workspace documents. |
 | `workspace-task` | Site Read / Builder Write | List/read/create/update/transition/archive private Workspace tasks. |
+
+## Advanced Metadata boundary
+
+`Advanced Metadata` is disabled by default and must be enabled by a WordPress administrator from **WP Native Builder → Settings**. It is intentionally provider- and post-type-neutral: the Bridge does not maintain an Astra/plugin/theme meta-key or CPT allowlist.
+
+Once enabled, a real WordPress post object can be targeted when the connected WordPress user may edit that exact object. The post type does not need to be public, REST-exposed, or editor-capable. Bridge-private Workspace types (`wpnb_doc` and `wpnb_task`) remain explicitly excluded. Revision IDs are canonicalized to their parent post before metadata authorization, physical-state inspection, hashing, or mutation so the authorized object is the object whose post metadata is changed.
+
+Protected/private keys (including keys beginning with `_`) can be reached under that administrator-controlled boundary. When Core or a provider explicitly registers a key or installs a post-meta authorization filter, that explicit authorization contract remains authoritative. Protected unregistered keys with no explicit authorization contract use the target post's `edit_post` authority once Advanced Metadata is enabled instead of WordPress's generic protected-meta default denial. Additional primitive capabilities or `do_not_allow` injected by `map_meta_cap` remain authoritative.
+
+The generic metadata surface deliberately does not expose arbitrary WordPress options, user meta, Bridge Workspace internals, or credential-like metadata keys. Credential filtering is provider-neutral and normalizes separator, camelCase, compact, singular, and plural forms for password/secret/credential, API/private-key, OAuth/access/refresh, session, identity/ID, JWT, bearer/auth, and related security-token concepts. Unrelated metadata such as a design token is not blocked merely for containing the word `token`.
+
+`state_hash` is computed from physical stored row identity (physical meta ID plus typed raw stored value) for the exact canonical key, not from registered default expansion and not from a `get_post_metadata` virtual-read short circuit. SQL `NULL` and an empty string are distinct states. An absent registered key and a stored row equal to that key's default are also distinct mutation states.
+
+Existing-row update/delete is bound to the one inspected physical row through an internal fixed-schema, byte-exact compare-and-swap. The raw key/value predicate does not use database text-collation equivalence, and SQL `NULL` is matched with an explicit null branch. Identical or collation-equivalent concurrent rows/values therefore cannot be silently updated/deleted as if they were the inspected bytes.
+
+Verification and compensation remain inside the persistence boundary. If interference is detected before verification completes, update restores only its own unchanged written row and delete restores only its own exact deleted row. The compensating change emits the corresponding WordPress metadata lifecycle actions so observers can reconcile to the final physical state. If the exact compensation predicate no longer matches newer bytes, the Bridge returns a compensation failure instead of overwriting them.
+
+Creation uses normal WordPress `add_post_meta(..., true)` semantics. Core performs the one sanitizer pass and normal add hooks; the Bridge observes the resulting sanitized value without sanitizing it again. The returned meta ID counts as Bridge-owned only while the exact post/key/raw value is unchanged. If Core's non-atomic uniqueness check races, the Bridge removes only its still-unchanged created row and emits the corresponding delete lifecycle. If an `added_post_meta` observer changed that same row, the Bridge preserves the observer state and returns stale rather than cleaning it up.
+
+The compare-and-swap helper is not a database tool exposed to callers: it accepts no caller-controlled SQL, table, column, query fragment, or row ID and is hard-bound to the authorized `wp_postmeta` row. Its fixed prepared raw update/delete statements exist only to provide byte-exact predicates that WordPress's generic text-column helpers cannot express. Generic SQL/database administration remains absent. This is an optimistic row-level integrity protocol, not a transaction/serializable-isolation guarantee; a later write after the verified operation can immediately make a returned state hash stale.
+
+Metadata values containing PHP objects/resources at any depth, or other values that cannot round-trip through the generic JSON contract without structural loss, are not generically replaceable or deletable. Metadata deletion additionally requires **Users & Destructive**.
 
 ## Optional Code Snippets fallback
 

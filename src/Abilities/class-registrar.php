@@ -62,6 +62,13 @@ final class Registrar {
 	private $content_abilities;
 
 	/**
+	 * Generic advanced post metadata provider.
+	 *
+	 * @var Post_Meta_Abilities
+	 */
+	private $post_meta_abilities;
+
+	/**
 	 * Gutenberg block provider.
 	 *
 	 * @var Block_Abilities
@@ -120,6 +127,7 @@ final class Registrar {
 		$mutation_log                  = new Mutation_Log();
 		$this->site_abilities          = new Site_Abilities( $this->resolver, $this->permissions );
 		$this->content_abilities       = new Content_Abilities( $this->permissions, $mutation_log );
+		$this->post_meta_abilities     = new Post_Meta_Abilities( $this->permissions, $mutation_log );
 		$this->block_abilities         = new Block_Abilities( $this->permissions, $mutation_log );
 		$this->media_abilities         = new Media_Abilities( $this->permissions, $mutation_log );
 		$this->taxonomy_abilities      = new Taxonomy_Abilities( $this->permissions, $mutation_log );
@@ -212,6 +220,7 @@ final class Registrar {
 
 		$this->site_abilities->register();
 		$this->content_abilities->register();
+		$this->post_meta_abilities->register();
 		$this->block_abilities->register();
 		$this->media_abilities->register();
 		$this->taxonomy_abilities->register();

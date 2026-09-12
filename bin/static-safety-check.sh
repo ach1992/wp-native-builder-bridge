@@ -17,9 +17,49 @@ if [[ "$media_write_count" != "1" || "$media_temp_count" != "1" ]]; then
     exit 1
 fi
 
-if grep -R -nF '$wpdb' src --include='*.php'; then
-    echo "ERROR: direct database access found in production source." >&2
+# Issue #34 needs exact-row compare-and-swap against wp_postmeta. Direct database use remains
+# forbidden everywhere except the one fixed-schema internal store below. That store accepts no
+# SQL text, table name, column name, row selector, or query fragment from Ability/client input.
+metadata_store='src/Support/class-post-meta-store.php'
+if [[ ! -f "$metadata_store" ]]; then
+    echo "ERROR: bounded post-meta store is missing." >&2
     exit 1
+fi
+unexpected_db_files="$(grep -R -lF '$wpdb' src --include='*.php' | grep -vFx "$metadata_store" || true)"
+if [[ -n "$unexpected_db_files" ]]; then
+    printf '%s\n' "$unexpected_db_files"
+    echo "ERROR: direct database access found outside the bounded post-meta store." >&2
+    exit 1
+fi
+if [[ -f "$metadata_store" ]]; then
+    if grep -nE '\$wpdb->(get_[A-Za-z0-9_]*|replace|esc_like)([^A-Za-z0-9_]|$)' "$metadata_store"; then
+        echo "ERROR: post-meta store grew a database read/generic primitive outside its fixed physical-row/CAS design." >&2
+        exit 1
+    fi
+    if grep -nE '\$wpdb->[A-Za-z_][A-Za-z0-9_]*' "$metadata_store" | grep -vE '\$wpdb->(postmeta|update|delete|insert|prepare|query)([^A-Za-z0-9_]|$)'; then
+        echo "ERROR: post-meta store uses a database member outside its fixed postmeta persistence surface." >&2
+        exit 1
+    fi
+    if grep -nE 'function[[:space:]]+[A-Za-z_][A-Za-z0-9_]*[[:space:]]*\([^)]*\$(sql|table|column|query|where)([^A-Za-z0-9_]|$)' "$metadata_store"; then
+        echo "ERROR: post-meta store must not accept caller-selected SQL/table/column/query inputs." >&2
+        exit 1
+    fi
+    if grep -nE '\$(sql|prepared_sql|set_sql|raw_sql)[[:space:]]*=' "$metadata_store"; then
+        echo "ERROR: post-meta raw CAS SQL must remain complete literal prepared templates, not assembled SQL fragments." >&2
+        exit 1
+    fi
+
+    prepare_count="$(grep -cF '$wpdb->prepare(' "$metadata_store" || true)"
+    query_count="$(grep -cF '$wpdb->query(' "$metadata_store" || true)"
+    binary_key_count="$(grep -cF 'CAST(meta_key AS BINARY) = CAST(%s AS BINARY)' "$metadata_store" || true)"
+    binary_value_count="$(grep -cF 'CAST(meta_value AS BINARY) = CAST(%s AS BINARY)' "$metadata_store" || true)"
+    null_value_count="$(grep -cF 'meta_value IS NULL' "$metadata_store" || true)"
+    set_null_count="$(grep -cF 'SET meta_value = NULL' "$metadata_store" || true)"
+    set_string_count="$(grep -cF 'SET meta_value = %s' "$metadata_store" || true)"
+    if [[ "$prepare_count" != "6" || "$query_count" != "6" || "$binary_key_count" != "6" || "$binary_value_count" != "3" || "$null_value_count" != "3" || "$set_null_count" != "2" || "$set_string_count" != "2" ]]; then
+        echo "ERROR: post-meta raw SQL must remain exactly the six fixed byte-exact update/delete CAS branches with explicit NULL handling." >&2
+        exit 1
+    fi
 fi
 
 # These names are forbidden in AI-exposed Ability schemas. OAuth protocol responses
@@ -27,6 +67,21 @@ fi
 if grep -R -nE "['\"](server_path|file_path|package_url|shell_command|sql_query|application_password|session_token|access_token|refresh_token|authorization_code|api_secret)['\"][[:space:]]*=>" src/Abilities --include='*.php'; then
     echo "ERROR: forbidden generic path/command/secret schema field found in an exposed Ability." >&2
     exit 1
+fi
+
+# Issue #34 deliberately adds generic post_meta access, not a generic WordPress data-store
+# backdoor. Keep options/user-meta APIs out of that provider so future edits cannot silently
+# expand its authority without an explicit architectural change.
+metadata_provider='src/Abilities/class-post-meta-abilities.php'
+if [[ -f "$metadata_provider" ]]; then
+    if grep -nE '(^|[^[:alnum:]_])(get|add|update|delete)_option[[:space:]]*\(' "$metadata_provider"; then
+        echo "ERROR: Advanced Metadata provider must not expose generic WordPress options." >&2
+        exit 1
+    fi
+    if grep -nE '(^|[^[:alnum:]_])(get|add|update|delete)_user_meta[[:space:]]*\(' "$metadata_provider"; then
+        echo "ERROR: Advanced Metadata provider must not expose generic user metadata." >&2
+        exit 1
+    fi
 fi
 
 # The consent form posts to the same WordPress origin, then redirects to ChatGPT's
