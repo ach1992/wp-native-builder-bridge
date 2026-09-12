@@ -18,6 +18,7 @@ final class Settings {
 	const GROUP_BUILDER_WRITE     = 'builder_write';
 	const GROUP_LIVE_CONTENT      = 'live_content';
 	const GROUP_SITE_CONFIG       = 'site_configuration';
+	const GROUP_ADVANCED_METADATA = 'advanced_metadata';
 	const GROUP_CODE_EXTENSIONS   = 'code_extensions';
 	const GROUP_USERS_DESTRUCTIVE = 'users_destructive';
 
@@ -67,6 +68,12 @@ final class Settings {
 			self::GROUP_SITE_CONFIG       => array(
 				'label'       => __( 'Site Configuration', 'wp-native-builder-bridge' ),
 				'description' => __( 'Allow supported global WordPress, theme, and Astra configuration changes.', 'wp-native-builder-bridge' ),
+				'default'     => false,
+				'warning'     => true,
+			),
+			self::GROUP_ADVANCED_METADATA => array(
+				'label'       => __( 'Advanced Metadata', 'wp-native-builder-bridge' ),
+				'description' => __( 'Allow authorized MCP clients to inspect and update protected/private post metadata for eligible content through WordPress metadata APIs. Options, user meta, Workspace internals, and credential-like keys remain outside this surface.', 'wp-native-builder-bridge' ),
 				'default'     => false,
 				'warning'     => true,
 			),
