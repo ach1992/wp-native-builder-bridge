@@ -18,8 +18,8 @@ if [[ "$media_write_count" != "1" || "$media_temp_count" != "1" ]]; then
 fi
 
 # Issue #34 needs exact-row compare-and-swap against wp_postmeta. Direct database use remains
-# forbidden everywhere except the one fixed-column internal store below. That store accepts no
-# SQL text, table name, or column name from Ability/client input.
+# forbidden everywhere except the one fixed-schema internal store below. That store accepts no
+# SQL text, table name, column name, row selector, or query fragment from Ability/client input.
 metadata_store='src/Support/class-post-meta-store.php'
 if [[ ! -f "$metadata_store" ]]; then
     echo "ERROR: bounded post-meta store is missing." >&2
@@ -32,12 +32,26 @@ if [[ -n "$unexpected_db_files" ]]; then
     exit 1
 fi
 if [[ -f "$metadata_store" ]]; then
-    if grep -nE '\$wpdb->(query|get_|prepare|replace)' "$metadata_store"; then
-        echo "ERROR: post-meta store must not grow generic/raw-query database primitives." >&2
+    if grep -nE '\$wpdb->(get_[A-Za-z0-9_]*|replace|esc_like)([^A-Za-z0-9_]|$)' "$metadata_store"; then
+        echo "ERROR: post-meta store grew a database read/generic primitive outside its fixed physical-row/CAS design." >&2
         exit 1
     fi
-    if grep -nE '\$wpdb->[A-Za-z_][A-Za-z0-9_]*' "$metadata_store" | grep -vE '\$wpdb->(postmeta|update|delete|insert)([^A-Za-z0-9_]|$)'; then
-        echo "ERROR: post-meta store uses a database member outside its fixed postmeta CAS surface." >&2
+    if grep -nE '\$wpdb->[A-Za-z_][A-Za-z0-9_]*' "$metadata_store" | grep -vE '\$wpdb->(postmeta|update|delete|insert|prepare|query)([^A-Za-z0-9_]|$)'; then
+        echo "ERROR: post-meta store uses a database member outside its fixed postmeta persistence surface." >&2
+        exit 1
+    fi
+    if grep -nE 'function[[:space:]]+[A-Za-z_][A-Za-z0-9_]*[[:space:]]*\([^)]*\$(sql|table|column|query|where)([^A-Za-z0-9_]|$)' "$metadata_store"; then
+        echo "ERROR: post-meta store must not accept caller-selected SQL/table/column/query inputs." >&2
+        exit 1
+    fi
+
+    prepare_count="$(grep -cF '$wpdb->prepare(' "$metadata_store" || true)"
+    query_count="$(grep -cF '$wpdb->query(' "$metadata_store" || true)"
+    binary_key_count="$(grep -cF 'CAST(meta_key AS BINARY) = CAST(%s AS BINARY)' "$metadata_store" || true)"
+    binary_value_count="$(grep -cF 'CAST(meta_value AS BINARY) = CAST(%s AS BINARY)' "$metadata_store" || true)"
+    null_value_count="$(grep -cF 'meta_value IS NULL' "$metadata_store" || true)"
+    if [[ "$prepare_count" != "2" || "$query_count" != "2" || "$binary_key_count" != "2" || "$binary_value_count" != "2" || "$null_value_count" != "2" ]]; then
+        echo "ERROR: post-meta raw SQL must remain exactly the two fixed byte-exact update/delete CAS primitives with explicit NULL handling." >&2
         exit 1
     fi
 fi
