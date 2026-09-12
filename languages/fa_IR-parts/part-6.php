@@ -1,9 +1,9 @@
 <?php
 return array(
 	'Advanced Metadata' => 'فرادادهٔ پیشرفته',
-	'Allow authorized MCP clients to inspect and update protected/private post metadata for eligible content through WordPress metadata APIs. Options, user meta, Workspace internals, and credential-like keys remain outside this surface.' => 'به کلاینت‌های مجاز MCP اجازه می‌دهد فرادادهٔ محافظت‌شده/خصوصی نوشته را برای محتوای واجد شرایط از طریق APIهای فرادادهٔ وردپرس بررسی و به‌روزرسانی کنند. تنظیمات options، فرادادهٔ کاربر، داده‌های داخلی فضای کاری و کلیدهای شبیه اطلاعات محرمانه خارج از این سطح باقی می‌مانند.',
+	'Allow authorized MCP clients to inspect and update protected/private post metadata for WordPress post objects the connected user may edit. Options, user meta, Workspace internals, and credential-like keys remain outside this surface.' => 'به کلاینت‌های مجاز MCP اجازه می‌دهد فرادادهٔ محافظت‌شده/خصوصی را برای اشیای نوشتهٔ وردپرس که کاربر متصل اجازهٔ ویرایششان را دارد بررسی و به‌روزرسانی کنند. تنظیمات options، فرادادهٔ کاربر، داده‌های داخلی فضای کاری و کلیدهای شبیه اطلاعات محرمانه خارج از این سطح باقی می‌مانند.',
 	'Read Post Metadata' => 'خواندن فرادادهٔ نوشته',
-	'Lists metadata keys or reads one exact metadata key for an eligible WordPress content object when Advanced Metadata access is enabled.' => 'وقتی دسترسی «فرادادهٔ پیشرفته» فعال باشد، کلیدهای فراداده را فهرست می‌کند یا یک کلید دقیق فراداده را برای یک شیء محتوای واجد شرایط وردپرس می‌خواند.',
+	'Lists metadata keys or reads one exact metadata key for a WordPress post object when Advanced Metadata access is enabled.' => 'وقتی دسترسی «فرادادهٔ پیشرفته» فعال باشد، کلیدهای فراداده را فهرست می‌کند یا یک کلید دقیق فراداده را برای یک شیء نوشتهٔ وردپرس می‌خواند.',
 	'Update Post Metadata' => 'به‌روزرسانی فرادادهٔ نوشته',
 	'Creates or replaces one single-value metadata key after checking Advanced Metadata access, WordPress authority, and the expected metadata state.' => 'پس از بررسی دسترسی «فرادادهٔ پیشرفته»، مجوز وردپرس و وضعیت مورد انتظار فراداده، یک کلید فرادادهٔ تک‌مقداری را ایجاد یا جایگزین می‌کند.',
 	'Delete Post Metadata' => 'حذف فرادادهٔ نوشته',
@@ -19,7 +19,7 @@ return array(
 	'Post metadata changed after it was read. Refresh the metadata state before deleting it.' => 'فرادادهٔ نوشته پس از خوانده‌شدن تغییر کرده است. پیش از حذف، وضعیت فراداده را دوباره دریافت کنید.',
 	'WordPress could not delete the requested metadata key.' => 'وردپرس نتوانست کلید فرادادهٔ درخواستی را حذف کند.',
 	'Advanced Metadata access is disabled in WP Native Builder settings.' => 'دسترسی «فرادادهٔ پیشرفته» در تنظیمات WP Native Builder غیرفعال است.',
-	'The requested post does not exist, is not eligible generic content, or cannot be edited by the current WordPress user.' => 'نوشتهٔ درخواستی وجود ندارد، محتوای عمومی واجد شرایط نیست، یا کاربر فعلی وردپرس اجازهٔ ویرایش آن را ندارد.',
+	'The requested post does not exist, belongs to Bridge-private Workspace storage, or cannot be edited by the current WordPress user.' => 'نوشتهٔ درخواستی وجود ندارد، متعلق به فضای کاری خصوصی Bridge است، یا کاربر فعلی وردپرس اجازهٔ ویرایش آن را ندارد.',
 	'Credential-like metadata keys are outside the generic Bridge metadata surface.' => 'کلیدهای فرادادهٔ شبیه اطلاعات احراز هویت و محرمانه خارج از سطح عمومی فرادادهٔ Bridge هستند.',
 	'The current WordPress user is not allowed to perform this metadata operation.' => 'کاربر فعلی وردپرس اجازهٔ انجام این عملیات فراداده را ندارد.',
 	'This metadata value cannot be represented safely through the JSON Ability contract.' => 'این مقدار فراداده را نمی‌توان به‌صورت امن در قرارداد JSON مربوط به Ability نمایش داد.',
