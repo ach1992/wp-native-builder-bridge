@@ -34,28 +34,29 @@ The boundary is deliberately layered:
 
 - the Advanced Metadata group must be enabled by a WordPress administrator;
 - the target must be a real WordPress post object and the connected WordPress user must be able to edit that exact object;
-- revision IDs are canonicalized to the parent before metadata authorization, read/hash identity, or mutation, matching the target used by WordPress post-meta mutation wrappers;
+- revision IDs are canonicalized to the parent before metadata authorization, physical-state inspection, hashing, or mutation, matching the target used by WordPress post-meta mutation wrappers;
 - the target post type does not need to be public, REST-exposed, or editor-capable;
 - Bridge-private Workspace post types (`wpnb_doc` and `wpnb_task`) are explicitly excluded;
 - normal post-meta capabilities remain authoritative for public keys and for keys where Core/provider code registered metadata or installed an explicit authorization filter;
 - protected/private unregistered keys may use the target post's `edit_post` authority once Advanced Metadata is enabled, because WordPress otherwise denies such keys generically merely for being protected;
 - additional capability requirements and `do_not_allow` returned by the final `map_meta_cap` pipeline remain authoritative;
-- credential-like key names are excluded through a provider-neutral normalization rule that covers common separator, camelCase, and compact token/secret forms;
+- credential-like key names are excluded through a provider-neutral normalization rule that covers common separator, camelCase, and compact password/secret/credential, API/private-key, OAuth/access/refresh, session, identity/ID, JWT, bearer/auth, and related security-token forms without banning unrelated uses of the generic word `token`;
 - list operations return keys/state summaries only; exact values require an explicitly named key;
-- mutation identity is based on physical stored rows rather than registered default expansion, so absent-with-default and stored-with-the-same-value are distinct states;
-- updates/deletes require an exact `state_hash`, reject stale writes, and refuse ambiguous multi-row keys;
-- creation uses WordPress unique-row semantics; replacement/deletion condition on the inspected previous value where Core can do so and verify the resulting state;
-- when WordPress cannot safely bind an empty/null-like previous value to a conditional mutation, the generic surface fails closed rather than falling back to an unconditional write;
-- metadata values containing PHP objects/resources at any depth, or values that do not survive the generic JSON contract structurally unchanged, are not generically replaceable;
+- mutation identity comes from the physical `wp_postmeta` rows, including physical row IDs and raw stored values, rather than registered defaults or `get_post_metadata` virtual-read short circuits;
+- updates/deletes require an exact `state_hash` and refuse ambiguous multi-row keys;
+- existing-row update/delete uses a narrowly bounded internal compare-and-swap against the exact inspected `meta_id + post_id + meta_key + raw meta_value`, so an identical concurrent row cannot be fanned out through a value-wide Core mutation;
+- when post-mutation verification detects concurrent interference, update rolls back only the row changed by that invocation and delete restores only the exact row deleted by that invocation before returning a stale conflict;
+- absent-row creation still uses WordPress `add_post_meta(..., true)` for normal Core sanitization/hooks; because Core uniqueness is a SELECT-then-INSERT check rather than a database constraint, the Bridge verifies the returned meta ID and removes only its own newly created row if contention produced multiple rows;
+- metadata values containing PHP objects/resources at any depth, or values that do not survive the generic JSON contract structurally unchanged, are not generically replaceable or deletable;
 - delete additionally requires Users & Destructive access.
 
-This surface does not grant direct database access and does not expose arbitrary options or user meta.
+The exact-row compare-and-swap helper is an internal fixed-purpose implementation detail, not an API surface. It accepts no SQL, table name, column name, meta ID, or database selector from the MCP client; it is hard-bound to the already-authorized `wp_postmeta` row. Static safety checks keep direct database use forbidden everywhere else in production source. The Bridge still exposes no arbitrary SQL or general database administration.
 
 ## Stale-write protection
 
 Overwrite-sensitive content, post-metadata, and Workspace operations return change identities. A later update must present the expected current identity. If the object changed after inspection, the Bridge rejects the write and requires the caller to refresh.
 
-Post metadata combines deterministic physical-row state identity with the strongest safe conditional mutation available through WordPress Core APIs: unique creation for an absent key and previous-value-conditioned replacement/deletion for an existing single row. The Bridge re-reads after mutation and reports a deterministic stale conflict when concurrent state is detected. Cases Core cannot condition safely through its public metadata APIs fail closed rather than weakening the concurrency guarantee.
+Post metadata uses deterministic physical-row identity plus exact-row compare-and-swap. The Bridge re-inspects physical rows after mutation. Concurrent duplicate/add/update/delete interference is reported as a deterministic stale conflict; where the Bridge itself already changed one row before discovering the interference, it performs a row-scoped compensation step rather than overwriting or deleting concurrent rows. If that exact compensation cannot be completed safely, the operation returns a dedicated compensation failure instead of claiming success.
 
 Workspace documents/tasks use monotonic `version` plus deterministic `state_hash` with an atomic compare-and-swap against the previous state payload.
 
@@ -83,13 +84,13 @@ Code Snippets integration is an intentional bounded provider integration. Submit
 
 The Bridge does not expose:
 
-- arbitrary SQL;
+- arbitrary SQL or database administration;
 - shell/process execution;
 - WP-CLI execution;
 - unrestricted filesystem access;
 - arbitrary `wp_options` access;
 - arbitrary user-meta administration;
-- credential, session, OAuth-secret, or Application Password retrieval;
+- credential, session, OAuth-secret, private-key, security-token, or Application Password retrieval;
 - arbitrary plugin ZIP/PHP upload;
 - direct provider-table administration.
 

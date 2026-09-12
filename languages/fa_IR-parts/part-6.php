@@ -25,4 +25,6 @@ return array(
 	'The current WordPress user is not allowed to perform this metadata operation.' => 'کاربر فعلی وردپرس اجازهٔ انجام این عملیات فراداده را ندارد.',
 	'This metadata value cannot be represented safely through the JSON Ability contract.' => 'این مقدار فراداده را نمی‌توان به‌صورت امن در قرارداد JSON مربوط به Ability نمایش داد.',
 	'value_json must contain one valid JSON value.' => 'value_json باید شامل یک مقدار JSON معتبر باشد.',
+	'Physical post metadata state could not be established safely.' => 'وضعیت فیزیکی فرادادهٔ نوشته را نمی‌توان به‌صورت امن تعیین کرد.',
+	'Concurrent metadata changed during mutation and the Bridge could not restore its exact physical row safely.' => 'فراداده هنگام تغییر به‌صورت هم‌زمان عوض شد و Bridge نتوانست ردیف فیزیکی دقیق خود را به‌صورت امن بازیابی کند.',
 );

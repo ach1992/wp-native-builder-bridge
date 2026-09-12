@@ -17,9 +17,29 @@ if [[ "$media_write_count" != "1" || "$media_temp_count" != "1" ]]; then
     exit 1
 fi
 
-if grep -R -nF '$wpdb' src --include='*.php'; then
-    echo "ERROR: direct database access found in production source." >&2
+# Issue #34 needs exact-row compare-and-swap against wp_postmeta. Direct database use remains
+# forbidden everywhere except the one fixed-column internal store below. That store accepts no
+# SQL text, table name, or column name from Ability/client input.
+metadata_store='src/Support/class-post-meta-store.php'
+if [[ ! -f "$metadata_store" ]]; then
+    echo "ERROR: bounded post-meta store is missing." >&2
     exit 1
+fi
+unexpected_db_files="$(grep -R -lF '$wpdb' src --include='*.php' | grep -vFx "$metadata_store" || true)"
+if [[ -n "$unexpected_db_files" ]]; then
+    printf '%s\n' "$unexpected_db_files"
+    echo "ERROR: direct database access found outside the bounded post-meta store." >&2
+    exit 1
+fi
+if [[ -f "$metadata_store" ]]; then
+    if grep -nE '\$wpdb->(query|get_|prepare|replace)' "$metadata_store"; then
+        echo "ERROR: post-meta store must not grow generic/raw-query database primitives." >&2
+        exit 1
+    fi
+    if grep -nE '\$wpdb->[A-Za-z_][A-Za-z0-9_]*' "$metadata_store" | grep -vE '\$wpdb->(postmeta|update|delete|insert)([^A-Za-z0-9_]|$)'; then
+        echo "ERROR: post-meta store uses a database member outside its fixed postmeta CAS surface." >&2
+        exit 1
+    fi
 fi
 
 # These names are forbidden in AI-exposed Ability schemas. OAuth protocol responses
