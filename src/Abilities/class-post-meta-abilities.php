@@ -271,9 +271,6 @@ final class Post_Meta_Abilities {
 			if ( is_wp_error( $value_error ) ) {
 				return $this->logged_error( $value_error, $post->ID, 'wp-native-builder/post-meta-update' );
 			}
-			if ( empty( $rows[0]['value'] ) ) {
-				return $this->logged_error( new WP_Error( 'post_meta_atomic_mutation_unsupported', __( 'WordPress cannot condition this metadata value atomically. The generic Bridge refuses the mutation to avoid a stale write.', 'wp-native-builder-bridge' ) ), $post->ID, 'wp-native-builder/post-meta-update' );
-			}
 		}
 
 		$current_hash = $this->state_hash( $rows );
@@ -290,17 +287,17 @@ final class Post_Meta_Abilities {
 			return $this->logged_error( new WP_Error( 'post_meta_value_not_json_compatible', __( 'This metadata value cannot be represented safely through the JSON Ability contract.', 'wp-native-builder-bridge' ) ), $post->ID, 'wp-native-builder/post-meta-update' );
 		}
 
+		if ( empty( $rows ) ) {
+			return $this->create_value( $post, $key, $value, $current_hash );
+		}
+
 		$prepared_value = $this->store->prepare_value( $post->ID, $key, $value );
 		$prepared_error = $this->unsupported_stored_value_error( $prepared_value['value'] );
 		if ( is_wp_error( $prepared_error ) ) {
 			return $this->logged_error( $prepared_error, $post->ID, 'wp-native-builder/post-meta-update' );
 		}
 
-		if ( empty( $rows ) ) {
-			return $this->create_value( $post, $key, $value, $current_hash );
-		}
-
-		if ( (string) $rows[0]['raw_value'] === (string) $prepared_value['raw_value'] ) {
+		if ( $rows[0]['raw_value'] === $prepared_value['raw_value'] ) {
 			return $this->item_from_rows( $key, $rows, true );
 		}
 
@@ -316,7 +313,7 @@ final class Post_Meta_Abilities {
 		if (
 			1 !== count( $after )
 			|| (int) $after[0]['meta_id'] !== (int) $rows[0]['meta_id']
-			|| (string) $after[0]['raw_value'] !== (string) $result['raw_value']
+			|| $after[0]['raw_value'] !== $result['raw_value']
 		) {
 			if ( ! $this->store->restore_updated_row( $rows[0], $result['raw_value'] ) ) {
 				return $this->logged_error( $this->compensation_error(), $post->ID, 'wp-native-builder/post-meta-update' );
@@ -383,9 +380,6 @@ final class Post_Meta_Abilities {
 		if ( is_wp_error( $value_error ) ) {
 			return $this->logged_error( $value_error, $post->ID, 'wp-native-builder/post-meta-delete' );
 		}
-		if ( '' === $rows[0]['value'] || null === $rows[0]['value'] || false === $rows[0]['value'] ) {
-			return $this->logged_error( new WP_Error( 'post_meta_atomic_mutation_unsupported', __( 'WordPress cannot condition this metadata value atomically. The generic Bridge refuses the mutation to avoid a stale write.', 'wp-native-builder-bridge' ) ), $post->ID, 'wp-native-builder/post-meta-delete' );
-		}
 
 		$result = $this->store->delete_row( $post->ID, $key, $rows[0] );
 		if ( is_wp_error( $result ) ) {
@@ -410,7 +404,7 @@ final class Post_Meta_Abilities {
 	}
 
 	/**
-	 * Creates one row, then removes only this invocation's row if Core's unique check races.
+	 * Creates one row, then removes only this invocation's unchanged row if Core's unique check races.
 	 *
 	 * @param object $post         Canonical post object.
 	 * @param string $key          Exact unslashed key.
@@ -419,8 +413,14 @@ final class Post_Meta_Abilities {
 	 * @return array<string,mixed>|WP_Error
 	 */
 	private function create_value( $post, $key, $value, $current_hash ) {
-		$result = add_post_meta( $post->ID, wp_slash( $key ), wp_slash( $value ), true );
-		$after  = $this->store->rows( $post->ID, $key );
+		$creation = $this->store->create_unique_row( $post->ID, $key, $value );
+		if ( is_wp_error( $creation ) ) {
+			return $this->logged_error( $creation, $post->ID, 'wp-native-builder/post-meta-update' );
+		}
+
+		$result       = $creation['result'];
+		$expected_row = $creation['expected_row'];
+		$after        = $this->store->rows( $post->ID, $key );
 		if ( is_wp_error( $after ) ) {
 			return $this->logged_error( $after, $post->ID, 'wp-native-builder/post-meta-update' );
 		}
@@ -440,17 +440,23 @@ final class Post_Meta_Abilities {
 			}
 		}
 
-		if ( 1 !== count( $after ) || null === $created_row ) {
-			if ( null !== $created_row && ! $this->store->cleanup_created_row( $created_row ) ) {
-				return $this->logged_error( $this->compensation_error(), $post->ID, 'wp-native-builder/post-meta-update' );
+		if ( null === $created_row || ! $this->store->row_matches( $created_row, $expected_row ) ) {
+			return $this->logged_error( $this->stale_error( 'update' ), $post->ID, 'wp-native-builder/post-meta-update' );
+		}
+
+		if ( 1 !== count( $after ) ) {
+			$cleanup = $this->store->cleanup_created_row( $expected_row );
+			if ( is_wp_error( $cleanup ) ) {
+				return $this->logged_error( $cleanup, $post->ID, 'wp-native-builder/post-meta-update' );
 			}
 			return $this->logged_error( $this->stale_error( 'update' ), $post->ID, 'wp-native-builder/post-meta-update' );
 		}
 
 		$created_value_error = $this->unsupported_stored_value_error( $created_row['value'] );
 		if ( is_wp_error( $created_value_error ) ) {
-			if ( ! $this->store->cleanup_created_row( $created_row ) ) {
-				return $this->logged_error( $this->compensation_error(), $post->ID, 'wp-native-builder/post-meta-update' );
+			$cleanup = $this->store->cleanup_created_row( $expected_row );
+			if ( is_wp_error( $cleanup ) ) {
+				return $this->logged_error( $cleanup, $post->ID, 'wp-native-builder/post-meta-update' );
 			}
 			return $this->logged_error( $created_value_error, $post->ID, 'wp-native-builder/post-meta-update' );
 		}
@@ -584,24 +590,24 @@ final class Post_Meta_Abilities {
 		$normalized = trim( $normalized, '_' );
 		$compact    = str_replace( '_', '', $normalized );
 
-		$single = '(password|passwd|secret|credential|credentials)';
-		$pairs  = '(access|refresh|bearer|auth|oauth|api|session|identity|id|jwt|security|csrf)_(token)'
-			. '|(api)_(key)'
-			. '|(private)_(key)'
-			. '|(application)_(password)'
-			. '|(client|consumer)_(secret)';
+		$single = '(passwords?|passwds?|secrets?|credentials?)';
+		$pairs  = '(access|refresh|bearer|auth|oauth|api|session|identity|id|jwt|security|csrf)_(tokens?)'
+			. '|(api)_(keys?)'
+			. '|(private)_(keys?)'
+			. '|(application)_(passwords?)'
+			. '|(client|consumer)_(secrets?)';
 		if ( 1 === preg_match( '/(^|_)(' . $single . '|' . $pairs . ')($|_)/', $normalized ) ) {
 			return true;
 		}
 
-		$compact_pairs = '(accesstoken|refreshtoken|bearertoken|authtoken|oauthtoken|apitoken|sessiontoken|identitytoken|idtoken|jwttoken|securitytoken|csrftoken|apikey|privatekey|applicationpassword|clientsecret|consumersecret)';
+		$compact_pairs = '(accesstokens?|refreshtokens?|bearertokens?|authtokens?|oauthtokens?|apitokens?|sessiontokens?|identitytokens?|idtokens?|jwttokens?|securitytokens?|csrftokens?|apikeys?|privatekeys?|applicationpasswords?|clientsecrets?|consumersecrets?)';
 		return 1 === preg_match( '/(' . $single . '|' . $compact_pairs . ')$/', $compact );
 	}
 
 	/**
-	 * @param string                   $key            Key.
-	 * @param array<int,array<string,mixed>> $rows     Physical rows.
-	 * @param bool                     $include_values Include values.
+	 * @param string                         $key            Key.
+	 * @param array<int,array<string,mixed>> $rows           Physical rows.
+	 * @param bool                           $include_values Include values.
 	 * @return array<string,mixed>|WP_Error
 	 */
 	private function item_from_rows( $key, array $rows, $include_values ) {
@@ -634,6 +640,7 @@ final class Post_Meta_Abilities {
 	/**
 	 * Returns stable physical-row identity. Empty identity deliberately preserves the
 	 * original Issue #34 empty-state hash for compatibility with existing clients/tests.
+	 * SQL NULL carries an explicit type tag so it cannot alias the empty string.
 	 *
 	 * @param array<int,array<string,mixed>> $rows Physical rows.
 	 * @return string
@@ -646,7 +653,8 @@ final class Post_Meta_Abilities {
 		foreach ( $rows as $row ) {
 			$identity[] = array(
 				(int) $row['meta_id'],
-				(string) $row['raw_value'],
+				null === $row['raw_value'] ? 'null' : 'string',
+				$row['raw_value'],
 			);
 		}
 		return hash( 'sha256', (string) maybe_serialize( $identity ) );
