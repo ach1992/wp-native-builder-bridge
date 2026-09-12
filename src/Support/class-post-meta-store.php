@@ -219,6 +219,20 @@ final class Post_Meta_Store {
 		}
 
 		wp_cache_delete( (int) $post_id, 'post_meta' );
+		$after = $this->rows( $post_id, $key );
+		if ( is_wp_error( $after ) ) {
+			if ( ! $this->restore_deleted_row( $row ) ) {
+				return new WP_Error( 'post_meta_compensation_failed', __( 'Concurrent metadata changed during mutation and the Bridge could not restore its exact physical row safely.', 'wp-native-builder-bridge' ) );
+			}
+			return $after;
+		}
+		if ( ! empty( $after ) ) {
+			if ( ! $this->restore_deleted_row( $row ) ) {
+				return new WP_Error( 'post_meta_compensation_failed', __( 'Concurrent metadata changed during mutation and the Bridge could not restore its exact physical row safely.', 'wp-native-builder-bridge' ) );
+			}
+			return new WP_Error( 'stale_post_meta_conflict', __( 'Post metadata changed after it was read. Refresh the metadata state before deleting it.', 'wp-native-builder-bridge' ) );
+		}
+
 		do_action( 'deleted_post_meta', $meta_ids, (int) $post_id, (string) $key, $row['value'] );
 		do_action( 'deleted_postmeta', $meta_ids );
 		return true;
