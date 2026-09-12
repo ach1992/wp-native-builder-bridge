@@ -149,11 +149,25 @@ $listed_keys = array_column( $listed['items'], 'key' );
 wpnb_issue34_assert( in_array( '_builder_markup', $listed_keys, true ), 'Builder metadata was not discoverable.' );
 wpnb_issue34_assert( ! in_array( 'api_secret', $listed_keys, true ), 'Credential metadata leaked through discovery.' );
 
-foreach ( array( 'sessionToken', 'session_token', 'idToken', 'id_token', 'jwtToken', 'jwt_token', 'clientSecret', 'accessToken' ) as $secret_key ) {
+$secret_keys = array(
+	'sessionToken', 'session_token', 'sessionTokens', 'session_tokens', 'SESSION__TOKENS', 'session\\tokens',
+	'identityTokens', 'identity_tokens', 'idToken', 'id_token', 'idTokens', 'idtokens',
+	'jwtToken', 'jwt_token', 'jwtTokens', 'jwttokens', 'securityTokens', 'csrfTokens',
+	'clientSecret', 'clientSecrets', 'client_secrets', 'consumerSecrets',
+	'accessToken', 'accessTokens', 'apiKeys', 'privateKeys', 'applicationPasswords',
+);
+foreach ( $secret_keys as $secret_key ) {
 	$GLOBALS['wpnb_issue34_meta'][101][ $secret_key ] = array( 'secret-fixture' );
 	$secret = $abilities->read( array( 'post_id' => 101, 'key' => $secret_key, 'include_values' => true ) );
 	wpnb_issue34_assert( is_wp_error( $secret ) && 'sensitive_post_meta_key' === $secret->get_error_code(), 'Credential-like key was not denied: ' . $secret_key );
 }
+$listed = $abilities->read( array( 'post_id' => 101 ) );
+$listed_keys = array_column( $listed['items'], 'key' );
+foreach ( $secret_keys as $secret_key ) {
+	wpnb_issue34_assert( ! in_array( $secret_key, $listed_keys, true ), 'Credential-like key leaked through discovery: ' . $secret_key );
+}
+$GLOBALS['wpnb_issue34_meta'][101]['design_token'] = array( 'blue' );
+wpnb_issue34_assert( ! is_wp_error( $abilities->read( array( 'post_id' => 101, 'key' => 'design_token' ) ) ), 'Unrelated design_token was overblocked.' );
 
 $read = $abilities->read( array( 'post_id' => 101, 'key' => '_builder_markup', 'include_values' => true ) );
 wpnb_issue34_assert( ! is_wp_error( $read ) && 1 === $read['items'][0]['count'], 'Builder metadata read failed.' );
@@ -178,6 +192,34 @@ $stale = $abilities->update(
 	)
 );
 wpnb_issue34_assert( is_wp_error( $stale ) && 'stale_post_meta_conflict' === $stale->get_error_code(), 'Stale update was not rejected.' );
+
+/* Empty-like physical values remain legitimate exact-row states. */
+foreach (
+	array(
+		'empty_string' => array( '', 'filled' ),
+		'zero_string'  => array( '0', 'one' ),
+		'empty_array'  => array( array(), array( 'filled' ) ),
+	) as $safe_key => $fixture
+) {
+	$GLOBALS['wpnb_issue34_meta'][101][ $safe_key ] = array( $fixture[0] );
+	$safe_read = $abilities->read( array( 'post_id' => 101, 'key' => $safe_key ) );
+	$safe_update = $abilities->update(
+		array(
+			'post_id'             => 101,
+			'key'                 => $safe_key,
+			'value_json'          => json_encode( $fixture[1] ),
+			'expected_state_hash' => $safe_read['items'][0]['state_hash'],
+		)
+	);
+	wpnb_issue34_assert( ! is_wp_error( $safe_update ), 'Safe empty-like metadata could not be updated: ' . $safe_key );
+}
+
+/* SQL-NULL-like harness state is distinct from the empty string in physical identity. */
+$GLOBALS['wpnb_issue34_meta'][101]['nullable_state'] = array( null );
+$null_read = $abilities->read( array( 'post_id' => 101, 'key' => 'nullable_state' ) );
+$GLOBALS['wpnb_issue34_meta'][101]['nullable_state'] = array( '' );
+$empty_read = $abilities->read( array( 'post_id' => 101, 'key' => 'nullable_state' ) );
+wpnb_issue34_assert( $null_read['items'][0]['state_hash'] !== $empty_read['items'][0]['state_hash'], 'NULL and empty-string physical states shared one hash.' );
 
 $multi = $abilities->read( array( 'post_id' => 101, 'key' => 'multi_value_key' ) );
 $multi_update = $abilities->update(
