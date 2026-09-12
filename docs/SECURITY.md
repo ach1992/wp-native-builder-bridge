@@ -20,7 +20,7 @@ OAuth never enables a Bridge access group and never grants a WordPress capabilit
 - **Builder Write** — bounded content/site-building mutations.
 - **Live Content** — publishing and other live-state transitions.
 - **Site Configuration** — bounded global configuration.
-- **Advanced Metadata** — protected/private post metadata for eligible content; disabled by default and intentionally separate from ordinary Site Read/Builder Write access.
+- **Advanced Metadata** — protected/private post metadata for WordPress post objects the connected user may edit; disabled by default and intentionally separate from ordinary Site Read/Builder Write access.
 - **Code & Extensions** — managed snippets and extension lifecycle.
 - **Users & Destructive** — user administration and destructive operations. Generic post-meta deletion requires this group in addition to Advanced Metadata.
 
@@ -28,15 +28,16 @@ Only Site Read is enabled by default.
 
 ## Advanced post metadata boundary
 
-Advanced Metadata exists for legitimate theme/plugin/builder state that is stored in `post_meta` instead of `post_content`. It is provider-neutral and does not require a new hardcoded allowlist entry for every theme or plugin key.
+Advanced Metadata exists for legitimate theme/plugin/builder state that is stored in `post_meta` instead of `post_content`. It is provider- and post-type-neutral and does not require a new hardcoded allowlist entry for every theme, plugin, CPT, or meta key.
 
 The boundary is deliberately layered:
 
 - the Advanced Metadata group must be enabled by a WordPress administrator;
-- the target must pass the same generic eligible-content predicate used by Bridge content operations, so private Workspace storage remains excluded;
-- the connected WordPress user must be able to edit the target post;
+- the target must be a real WordPress post object and the connected WordPress user must be able to edit that exact object;
+- the target post type does not need to be public, REST-exposed, or editor-capable;
+- Bridge-private Workspace post types (`wpnb_doc` and `wpnb_task`) are explicitly excluded;
 - normal post-meta capabilities remain authoritative for public keys and for keys where Core/provider code registered metadata or installed an explicit authorization filter;
-- protected/private unregistered keys may use the target post's edit authority once Advanced Metadata is enabled, because WordPress otherwise denies such keys generically merely for being protected;
+- protected/private unregistered keys may use the target post's `edit_post` authority once Advanced Metadata is enabled, because WordPress otherwise denies such keys generically merely for being protected;
 - credential-like key names are excluded from the generic surface;
 - list operations return keys/state summaries only; exact values require an explicitly named key;
 - updates/deletes require an exact `state_hash`, reject stale writes, and refuse ambiguous multi-row keys;
@@ -51,9 +52,9 @@ Overwrite-sensitive content, post-metadata, and Workspace operations return chan
 
 Workspace documents/tasks use monotonic `version` plus deterministic `state_hash` with an atomic compare-and-swap against the previous state payload.
 
-## Content and Gutenberg isolation
+## Content, Gutenberg, and metadata isolation
 
-Generic content/Gutenberg/post-metadata operations are limited to eligible editor-capable WordPress content types. Internal Workspace storage is explicitly excluded from those generic abilities and is reachable only through the dedicated Workspace contract.
+Generic content/Gutenberg operations remain limited to their existing eligible editor-capable content predicate. Advanced Metadata is intentionally broader because the site administrator explicitly opts into it, but Bridge-private Workspace storage remains excluded from the generic metadata surface and is reachable only through the dedicated Workspace contract.
 
 ## Upload boundary
 
@@ -91,4 +92,4 @@ Authorization codes, access tokens, and refresh tokens are opaque. Secret-bearin
 
 ## Activity logging
 
-The mutation log is bounded and metadata-oriented. It should not be treated as a content archive and must not be used to log credentials, metadata values, or full submitted payloads.
+The mutation log is bounded and metadata-oriented. It should not be treated as a content archive and must not be used to log credentials, metadata keys, metadata values, or full submitted payloads.
