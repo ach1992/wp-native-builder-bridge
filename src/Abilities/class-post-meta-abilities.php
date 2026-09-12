@@ -579,9 +579,19 @@ final class Post_Meta_Abilities {
 		return array(
 			'type'                 => 'object',
 			'properties'           => array(
-				'post_id'        => array( 'type' => 'integer', 'minimum' => 1 ),
-				'key'            => array( 'type' => 'string', 'minLength' => 1, 'maxLength' => 255 ),
-				'include_values' => array( 'type' => 'boolean', 'default' => false ),
+				'post_id'        => array(
+					'type'    => 'integer',
+					'minimum' => 1,
+				),
+				'key'            => array(
+					'type'      => 'string',
+					'minLength' => 1,
+					'maxLength' => 255,
+				),
+				'include_values' => array(
+					'type'    => 'boolean',
+					'default' => false,
+				),
 			),
 			'required'             => array( 'post_id' ),
 			'additionalProperties' => false,
@@ -593,10 +603,24 @@ final class Post_Meta_Abilities {
 		return array(
 			'type'                 => 'object',
 			'properties'           => array(
-				'post_id'             => array( 'type' => 'integer', 'minimum' => 1 ),
-				'key'                 => array( 'type' => 'string', 'minLength' => 1, 'maxLength' => 255 ),
-				'value_json'          => array( 'type' => 'string', 'minLength' => 1 ),
-				'expected_state_hash' => array( 'type' => 'string', 'minLength' => 64, 'maxLength' => 64 ),
+				'post_id'             => array(
+					'type'    => 'integer',
+					'minimum' => 1,
+				),
+				'key'                 => array(
+					'type'      => 'string',
+					'minLength' => 1,
+					'maxLength' => 255,
+				),
+				'value_json'          => array(
+					'type'      => 'string',
+					'minLength' => 1,
+				),
+				'expected_state_hash' => array(
+					'type'      => 'string',
+					'minLength' => 64,
+					'maxLength' => 64,
+				),
 			),
 			'required'             => array( 'post_id', 'key', 'value_json', 'expected_state_hash' ),
 			'additionalProperties' => false,
@@ -608,9 +632,20 @@ final class Post_Meta_Abilities {
 		return array(
 			'type'                 => 'object',
 			'properties'           => array(
-				'post_id'             => array( 'type' => 'integer', 'minimum' => 1 ),
-				'key'                 => array( 'type' => 'string', 'minLength' => 1, 'maxLength' => 255 ),
-				'expected_state_hash' => array( 'type' => 'string', 'minLength' => 64, 'maxLength' => 64 ),
+				'post_id'             => array(
+					'type'    => 'integer',
+					'minimum' => 1,
+				),
+				'key'                 => array(
+					'type'      => 'string',
+					'minLength' => 1,
+					'maxLength' => 255,
+				),
+				'expected_state_hash' => array(
+					'type'      => 'string',
+					'minLength' => 64,
+					'maxLength' => 64,
+				),
 			),
 			'required'             => array( 'post_id', 'key', 'expected_state_hash' ),
 			'additionalProperties' => false,
@@ -624,7 +659,10 @@ final class Post_Meta_Abilities {
 			'properties'           => array(
 				'post_id'   => array( 'type' => 'integer' ),
 				'post_type' => array( 'type' => 'string' ),
-				'items'     => array( 'type' => 'array', 'items' => $this->item_schema() ),
+				'items'     => array(
+					'type'  => 'array',
+					'items' => $this->item_schema(),
+				),
 			),
 			'required'             => array( 'post_id', 'post_type', 'items' ),
 			'additionalProperties' => false,
@@ -639,7 +677,10 @@ final class Post_Meta_Abilities {
 				'key'         => array( 'type' => 'string' ),
 				'count'       => array( 'type' => 'integer' ),
 				'state_hash'  => array( 'type' => 'string' ),
-				'value_types' => array( 'type' => 'array', 'items' => array( 'type' => 'string' ) ),
+				'value_types' => array(
+					'type'  => 'array',
+					'items' => array( 'type' => 'string' ),
+				),
 				'values'      => array(
 					'type'  => 'array',
 					'items' => array(
@@ -661,16 +702,19 @@ final class Post_Meta_Abilities {
 	/**
 	 * Ability metadata annotations.
 	 *
-	 * @param bool $readonly    Readonly.
+	 * @param bool $read_only   Readonly.
 	 * @param bool $destructive Destructive.
 	 * @param bool $idempotent  Idempotent.
 	 * @return array<string,mixed>
 	 */
-	private function meta( $readonly, $destructive, $idempotent ) {
+	private function meta( $read_only, $destructive, $idempotent ) {
 		return array(
-			'mcp'         => array( 'public' => true, 'type' => 'tool' ),
+			'mcp'         => array(
+				'public' => true,
+				'type'   => 'tool',
+			),
 			'annotations' => array(
-				'readonly'    => (bool) $readonly,
+				'readonly'    => (bool) $read_only,
 				'destructive' => (bool) $destructive,
 				'idempotent'  => (bool) $idempotent,
 			),
