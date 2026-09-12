@@ -334,8 +334,8 @@ final class Post_Meta_Store {
 	 * @return array<int,array<string,mixed>>
 	 */
 	private function test_rows( $post_id, $key ) {
-		$all = get_post_meta( (int) $post_id );
-		$all = is_array( $all ) ? $all : array();
+		$all  = get_post_meta( (int) $post_id );
+		$all  = is_array( $all ) ? $all : array();
 		$rows = array();
 		foreach ( $all as $meta_key => $values ) {
 			if ( null !== $key && (string) $meta_key !== (string) $key ) {
