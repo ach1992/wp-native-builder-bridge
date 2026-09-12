@@ -387,6 +387,11 @@ final class Post_Meta_Abilities {
 	 * Preserves explicit provider/Core meta authorization while allowing deliberately
 	 * enabled private unregistered metadata through the post's own edit capability.
 	 *
+	 * For protected unregistered keys, Core adds the requested meta capability itself
+	 * to the mapped primitive-cap list as the default deny sentinel. Advanced Metadata
+	 * removes only that sentinel. Any additional requirements injected through the
+	 * final map_meta_cap filter remain enforced.
+	 *
 	 * @param object $post      Post object.
 	 * @param string $key       Exact metadata key.
 	 * @param string $operation add, edit, or delete.
@@ -409,6 +414,20 @@ final class Post_Meta_Abilities {
 			return current_user_can( $capability, $post->ID, $key );
 		}
 
+		if ( ! function_exists( 'map_meta_cap' ) || ! function_exists( 'get_current_user_id' ) ) {
+			return true;
+		}
+
+		$mapped_caps = map_meta_cap( $capability, get_current_user_id(), $post->ID, $key );
+		foreach ( array_unique( (array) $mapped_caps ) as $required_cap ) {
+			if ( $capability === $required_cap ) {
+				continue;
+			}
+			if ( 'do_not_allow' === $required_cap || ! current_user_can( $required_cap ) ) {
+				return false;
+			}
+		}
+
 		return true;
 	}
 
@@ -421,8 +440,12 @@ final class Post_Meta_Abilities {
 	 */
 	private function has_explicit_meta_auth_contract( $post_type, $key ) {
 		if ( function_exists( 'get_registered_meta_keys' ) ) {
-			$registered = get_registered_meta_keys( 'post', $post_type );
-			if ( is_array( $registered ) && isset( $registered[ $key ] ) ) {
+			$registered_global  = get_registered_meta_keys( 'post' );
+			$registered_subtype = get_registered_meta_keys( 'post', $post_type );
+			if (
+				( is_array( $registered_global ) && isset( $registered_global[ $key ] ) )
+				|| ( is_array( $registered_subtype ) && isset( $registered_subtype[ $key ] ) )
+			) {
 				return true;
 			}
 		}
