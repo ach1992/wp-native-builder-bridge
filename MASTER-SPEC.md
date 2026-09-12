@@ -16,11 +16,19 @@ The complete pre-public-release specification and the detailed documents that ex
 
 ## 1. Purpose
 
-`wp-native-builder-bridge` is a small, free, self-hosted WordPress plugin that exposes the WordPress operations an AI site-building assistant needs through machine-readable, permission-checked WordPress Abilities and MCP.
+`wp-native-builder-bridge` is a small, free, self-hosted WordPress plugin that exposes the WordPress operations an AI site-building and administration assistant needs through machine-readable, permission-checked WordPress Abilities and MCP.
 
 Its purpose is to reduce manual WordPress administration while keeping WordPress capabilities, explicit Bridge access groups, typed operations, and normal WordPress APIs as the primary safety boundary.
 
 The plugin is the WordPress-side integration layer. The companion `wp-native-builder` project may plan and orchestrate site-building workflows, but the two repositories remain independently owned. This repository must not depend on chat history or on mutable state stored only in the companion repository.
+
+### Administrator-controlled capability coverage
+
+The accepted product direction includes broad legitimate WordPress administration, including URL-based media import and installed plugin/theme source-code editing. Implement generic workflows ahead of individual site requests where supported contracts exist; do not require a Bridge source change merely because a provider, taxonomy, metadata key, installed extension, or public download origin was not hardcoded previously.
+
+This is a product requirement, not a claim that every capability is already implemented. The implementation and public Ability inventory must distinguish available, implemented-but-disabled, missing, and upstream/environment-blocked operations. New compatible registered provider Abilities should be reusable through their real schemas and permission callbacks rather than duplicated in provider-specific Bridge adapters. An absent or private third-party execution contract must remain an honest capability gap, not a fictional permission toggle.
+
+[Issue #38](https://github.com/ach1992/wp-native-builder-bridge/issues/38) owns the bounded administration-coverage implementation slices. The separate term-metadata contract in [Issue #36](https://github.com/ach1992/wp-native-builder-bridge/issues/36) remains independently scoped. This direction does not authorize live permission changes, deployment, or release publication.
 
 ## 2. Architecture
 
@@ -108,22 +116,26 @@ Security is layered:
 
 Enabling a Bridge group never grants a WordPress capability the connected user does not already have. The deliberate Advanced Metadata rule for protected unregistered post metadata is not a new WordPress role capability: the administrator explicitly exposes that Bridge surface, the connected user must still have `edit_post` authority for the exact target object, and explicit Core/provider metadata authorization contracts remain authoritative when present.
 
+Configurable administrative policy is distinct from authentication and integrity protection. Administrative settings may widen legitimate workflows within WordPress and hosting constraints; they must not disable target authority, provider denial, path containment, SSRF protection, resource bounds, stale-write protection, or privacy-safe logging. Ordinary generic data/provider routes must not enable their own access policy or bypass a disabled elevated-code boundary.
+
+Executable code is a separate trust boundary. Once an administrator authorizes executable source changes, snippets, or extension installation, the resulting PHP runs with the WordPress runtime's authority and can affect application data and policy. Access groups, secret-key exclusions, and mutation logs are not a sandbox against deliberately authorized PHP. Entry authorization and exact change/recovery controls still apply, but documentation must not promise containment or transactional reversal of already-executed code side effects.
+
 ### Explicit exclusions
 
 Do not expose generic abilities equivalent to:
 
-- arbitrary PHP execution;
+- a raw PHP evaluator;
 - arbitrary SQL execution;
 - arbitrary shell or WP-CLI execution;
 - unrestricted filesystem read/write;
 - arbitrary `wp_options` administration;
 - arbitrary user-meta administration;
-- arbitrary plugin/theme package URLs or arbitrary executable uploads;
+- executable package installation through ordinary media-upload or generic data routes;
 - retrieval of credentials, salts, private keys, application passwords, bearer tokens, or secret configuration values.
 
 A fixed-purpose internal persistence primitive used only to preserve the correctness of an already-authorized typed operation is not an exposed generic SQL/database surface. Such code must be hard-bound to the intended data model, accept no caller-selected SQL/table/column/query fragments, use prepared/structured WordPress database operations, remain statically constrained to its narrow owner, and be covered by focused real-runtime tests and review.
 
-If a future legitimate use case needs one of the privileged generic surfaces above, define a separate bounded contract and authorization model instead of silently expanding an unrelated Ability.
+Legitimate elevated workflows require their own bounded contract and authorization model instead of silently expanding an unrelated Ability. Installed plugin/theme source editing and separately gated package workflows are accepted requirements, not permanent provider-specific prohibitions; they do not authorize a raw evaluator, unchecked HTTP proxy, unrestricted filesystem endpoint, or credential extraction.
 
 ## 6. Access groups
 
@@ -140,6 +152,8 @@ Keep a small grouped permission model rather than dozens of per-tool switches.
 | **Users & Destructive** | user/role administration and destructive operations | Disabled |
 
 Settings changes require `manage_options`.
+
+Powerful additions must remain disabled on both fresh installations and upgrades until an administrator explicitly enables their intended boundary. In particular, introducing plugin/theme source editing must not silently widen prior consent when Code & Extensions was already enabled. Use an explicit source-editing opt-in through a justified subpermission or small group; do not advertise it as available until its implementation and validation exist.
 
 ## 7. Ability contract
 
@@ -167,11 +181,11 @@ Required capability families include:
 - posts, pages, and eligible custom post types;
 - Gutenberg block inspection and targeted mutation;
 - administrator-controlled generic post metadata for WordPress post objects, including protected/private metadata stored by themes/plugins/builders;
-- media inspection, bounded upload/update/delete;
+- media inspection, bounded upload/URL import/update/delete;
 - taxonomies and terms;
 - navigation/menu management;
 - bounded site configuration;
-- supported plugin/theme lifecycle operations;
+- supported plugin/theme lifecycle operations and separately authorized source-file editing;
 - users and roles behind the high-impact access group;
 - Persistent Workspace documents/tasks/state;
 - verified optional-provider integrations where the active stack supports them.
@@ -196,11 +210,21 @@ Targeted block operations may use a block/content fingerprint appropriate to the
 
 Destructive states and permanent deletion remain separately permission-gated.
 
-## 9. Media and extension installation
+## 9. Media, extension installation, and source editing
 
 Media upload must use WordPress Media Library handling. Client input may contain file bytes and a filename, but must not select an arbitrary server filesystem path. Enforce the smaller of the configured WordPress upload limit and the Bridge's bounded absolute upload cap.
 
-Plugin/theme installation must stay narrower than a generic uploader. Normal installation is limited to supported WordPress.org/provider lifecycle APIs and must not become an arbitrary ZIP/PHP/package-URL execution path.
+URL-to-Media-Library import is a required typed workflow, not an unchecked download proxy. Use bounded safe HTTP handling, validate redirects and destinations, apply WordPress upload/MIME/attachment handling, and clean up temporary files deterministically. Public origins must not require a hardcoded per-origin Bridge adapter. Importing media must never substitute for executable extension installation.
+
+Plugin/theme installation must stay narrower than a generic uploader. The shipped installation baseline uses supported WordPress.org/provider lifecycle APIs. Additional package-source workflows require separate explicit authorization, validated package/target identity, and their own lifecycle/rollback contract; they must not become an arbitrary ZIP/PHP execution path through an unrelated upload Ability.
+
+Plugin/theme source editing must provide actual discovery, authorized read, exact change preview, apply, and recovery for files discovered through WordPress's installed-extension and editable-file contracts. Enforce current `edit_plugins` or `edit_themes` authority, multisite/Super Admin rules, `DISALLOW_FILE_EDIT`, `DISALLOW_FILE_MODS`, and actual filesystem permissions. A host or WordPress policy denial must be explained, not silently overridden.
+
+Resolve the exact installed extension and relative file, verify real-path containment, and reject traversal, symlink escapes, arbitrary server paths, and unrelated configuration/credential files. Bind changes to current file bytes/hash and candidate identity, reject stale state, verify persisted bytes, and retain an exact preimage with bounded private recovery storage. Recovery must not clobber concurrent legitimate edits. Reuse supported WordPress editor/lifecycle APIs where suitable, but verify their actual PHP validation, active/inactive/network-active, loopback-authentication, cache, and failure behavior rather than assuming those guarantees.
+
+Recommend hooks, custom plugins, and child themes for routine customization because upstream updates can replace vendor/parent-theme edits; this is guidance, not a permanent Bridge ban on an explicitly authorized source edit. Changes to the Bridge, MCP Adapter, or other control-plane code require a connection-loss warning and a proven recovery mechanism, not an undisclosed provider blacklist. Source and diff output require elevated source access and must not enter ordinary list output or mutation logs.
+
+These additions are accepted implementation requirements. The public Ability inventory must continue to describe only implemented behavior until each bounded slice is validated and integrated.
 
 ## 10. Persistent Workspace
 
