@@ -17,8 +17,8 @@ The baseline installation registers the core Bridge surfaces below. Optional Gra
 | `blocks-read` | Site Read | Parse Gutenberg blocks for eligible content. |
 | `blocks-mutate` | Builder Write | Targeted Gutenberg append/insert/replace/remove with stale-state protection. |
 | `post-meta-read` | Advanced Metadata | Discover post-meta keys or read one exact key for a WordPress post object the connected user may edit. Values are returned only for an explicitly named key. |
-| `post-meta-update` | Advanced Metadata | Create/replace one single-value post-meta key with stale-state protection. Ambiguous multi-row keys and PHP-object replacement fail closed. |
-| `post-meta-delete` | Advanced Metadata + Users & Destructive | Delete one single-value post-meta key with stale-state protection. |
+| `post-meta-update` | Advanced Metadata | Create/replace one single-value post-meta key with physical-row state identity and conditional stale-write protection. Ambiguous or non-lossless cases fail closed. |
+| `post-meta-delete` | Advanced Metadata + Users & Destructive | Delete one single-value post-meta key with physical-row state identity and conditional stale-write protection. |
 | `media-read` | Site Read | Read Media Library attachments. |
 | `media-upload` | Builder Write | Upload bounded file bytes through WordPress Media APIs. |
 | `media-update` | Builder Write | Update bounded attachment metadata/parent. |
@@ -44,11 +44,15 @@ The baseline installation registers the core Bridge surfaces below. Optional Gra
 
 `Advanced Metadata` is disabled by default and must be enabled by a WordPress administrator from **WP Native Builder → Settings**. It is intentionally provider- and post-type-neutral: the Bridge does not maintain an Astra/plugin/theme meta-key or CPT allowlist.
 
-Once enabled, a real WordPress post object can be targeted when the connected WordPress user may edit that exact object. The post type does not need to be public, REST-exposed, or editor-capable. Bridge-private Workspace types (`wpnb_doc` and `wpnb_task`) remain explicitly excluded.
+Once enabled, a real WordPress post object can be targeted when the connected WordPress user may edit that exact object. The post type does not need to be public, REST-exposed, or editor-capable. Bridge-private Workspace types (`wpnb_doc` and `wpnb_task`) remain explicitly excluded. Revision IDs are canonicalized to their parent post before metadata authorization, state inspection, hashing, or mutation so the object being authorized is the object WordPress would mutate through its post-meta wrappers.
 
-Protected/private keys (including keys beginning with `_`) can be reached under that administrator-controlled boundary. When Core or a provider explicitly registers a key or installs a post-meta authorization filter, that explicit authorization contract remains authoritative. Protected unregistered keys with no explicit authorization contract use the target post's `edit_post` authority once Advanced Metadata is enabled instead of WordPress's generic protected-meta default denial.
+Protected/private keys (including keys beginning with `_`) can be reached under that administrator-controlled boundary. When Core or a provider explicitly registers a key or installs a post-meta authorization filter, that explicit authorization contract remains authoritative. Protected unregistered keys with no explicit authorization contract use the target post's `edit_post` authority once Advanced Metadata is enabled instead of WordPress's generic protected-meta default denial. Additional primitive capabilities or `do_not_allow` injected by `map_meta_cap` remain authoritative.
 
-The generic metadata surface deliberately does not expose arbitrary WordPress options, user meta, Bridge Workspace internals, or credential-like metadata keys. Updates and deletes require the exact `state_hash` returned by `post-meta-read`; generic mutation refuses ambiguous multi-row keys and PHP-object values rather than guessing or performing lossy conversion. Metadata deletion additionally requires **Users & Destructive**.
+The generic metadata surface deliberately does not expose arbitrary WordPress options, user meta, Bridge Workspace internals, or credential-like metadata keys. Credential filtering is provider-neutral and normalizes common separator, camelCase, and compact token/secret naming forms rather than relying on provider-specific names.
+
+`state_hash` is computed from the physical stored rows for the exact canonical key, not from registered default expansion. An absent registered key and a stored row equal to that key's default are therefore distinct mutation states. Updates and deletes require the exact current state hash, refuse ambiguous multi-row keys, use conditional/unique WordPress metadata mutations when Core can bind the inspected state to the write, and verify the resulting row state. If Core cannot safely condition a previous value (for example an empty previous value), the generic mutation fails closed instead of performing an unconditional stale-prone write.
+
+Metadata values containing PHP objects/resources at any depth, or other values that cannot round-trip through the generic JSON contract without structural loss, are not generically replaceable. Metadata deletion additionally requires **Users & Destructive**.
 
 ## Optional Code Snippets fallback
 
