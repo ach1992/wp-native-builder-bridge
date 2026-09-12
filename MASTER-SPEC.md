@@ -57,7 +57,10 @@ For every logical operation:
 2. reuse that public contract directly when it is sufficient;
 3. add only a thin normalization wrapper when a stable normalized Bridge contract is materially useful;
 4. otherwise use a supported public WordPress/provider API to implement a bounded typed fallback;
-5. if neither exists, report a capability gap rather than guessing or opening a generic execution channel.
+5. when the public API cannot provide a required correctness, integrity, or concurrency guarantee, use the smallest fixed-purpose internal persistence primitive that is hard-bound to the already-authorized object/data model, accepts no caller-selected SQL/table/column/query/command surface, preserves relevant WordPress sanitization/cache/authorization semantics, fails closed on ambiguity, and has focused validation plus high-assurance review;
+6. if no bounded safe mechanism exists, report a capability gap rather than guessing or opening a generic execution channel.
+
+Public WordPress/provider APIs are the default implementation path, not an absolute prohibition on internal persistence needed to make a bounded typed operation correct.
 
 Do not use fuzzy semantic matching to invoke unknown third-party operations merely because an Ability name or description looks similar.
 
@@ -76,7 +79,7 @@ Do not bundle a private copy of MCP Adapter. Detect required dependencies at run
 
 ## 4. Design principles
 
-1. **WordPress-native** — use WordPress Core and supported provider contracts.
+1. **WordPress-native** — use WordPress Core and supported provider contracts first; use a fixed-purpose internal persistence primitive only when a public API cannot provide a required correctness/integrity guarantee, never as a generic administration surface.
 2. **Typed abilities** — expose specific operations with closed schemas, not arbitrary execution.
 3. **Capability enforcement** — every Bridge-owned operation checks the current WordPress user's authority.
 4. **Admin-controlled exposure** — powerful groups are disabled until explicitly enabled.
@@ -99,7 +102,7 @@ Security is layered:
 | WordPress user | Own effective WordPress capabilities. |
 | Bridge access groups | Decide which classes of Bridge operations are exposed. |
 | Ability permission callback | Enforce the required access group and WordPress capability. |
-| Ability implementation | Validate input, apply object-level checks, and use supported APIs. |
+| Ability implementation | Validate input, apply object-level checks, and use supported APIs or narrowly bounded internal correctness primitives. |
 | Existing provider Ability | Retain its own registered permission callback and public contract. |
 | AI workflow | Follow any higher-level user approval requirement for consequential work. |
 
@@ -118,7 +121,9 @@ Do not expose generic abilities equivalent to:
 - arbitrary plugin/theme package URLs or arbitrary executable uploads;
 - retrieval of credentials, salts, private keys, application passwords, bearer tokens, or secret configuration values.
 
-If a future legitimate use case needs one of these privileged surfaces, define a separate bounded contract and authorization model instead of silently expanding an unrelated Ability.
+A fixed-purpose internal persistence primitive used only to preserve the correctness of an already-authorized typed operation is not an exposed generic SQL/database surface. Such code must be hard-bound to the intended data model, accept no caller-selected SQL/table/column/query fragments, use prepared/structured WordPress database operations, remain statically constrained to its narrow owner, and be covered by focused real-runtime tests and review.
+
+If a future legitimate use case needs one of the privileged generic surfaces above, define a separate bounded contract and authorization model instead of silently expanding an unrelated Ability.
 
 ## 6. Access groups
 
@@ -177,9 +182,13 @@ Generic content and Gutenberg operations use an explicit eligibility predicate a
 
 Advanced Metadata is intentionally a separate, broader administrator-controlled surface. It must not use provider, post-type, or meta-key allowlists that force Bridge development for each legitimate `post_meta` workflow. Any real WordPress post object may be targeted when Advanced Metadata is enabled and the connected user can edit that exact object, regardless of whether the post type is public, REST-exposed, or editor-capable. Bridge-private Workspace post types remain explicitly excluded.
 
-Protected/private unregistered metadata may use the exact target post's `edit_post` authority once Advanced Metadata is enabled; this deliberately supersedes WordPress's generic default denial that exists solely because the key is protected. If Core/provider code explicitly registered the key or installed a metadata authorization filter, that explicit authorization contract remains authoritative. Credential-like keys remain outside the generic surface.
+Protected/private unregistered metadata may use the exact target post's `edit_post` authority once Advanced Metadata is enabled; this deliberately supersedes WordPress's generic default denial that exists solely because the key is protected. If Core/provider code explicitly registered the key or installed a metadata authorization filter, that explicit authorization contract remains authoritative. Credential-like keys, including credential/session/identity/security token forms, remain outside the generic surface.
 
-Metadata value discovery should be compact: broad inspection may enumerate authorized keys and state identity, but callers must name an exact key before receiving its value. Generic metadata writes/deletes require current state identity sufficient to reject stale writes. Ambiguous multi-row metadata and values that cannot be losslessly represented by the typed contract must fail closed rather than being guessed or collapsed. Metadata deletion also requires Users & Destructive access.
+Metadata value discovery should be compact: broad inspection may enumerate authorized keys and state identity, but callers must name an exact key before receiving its value. Mutation identity must describe actual physical stored rows, including stable row identity and raw stored value, rather than registered defaults or a filter-short-circuited virtual metadata view. Ambiguous multi-row metadata and values that cannot be losslessly represented by the typed contract must fail closed rather than being guessed or collapsed. Metadata deletion also requires Users & Destructive access.
+
+For existing single-row metadata, update/delete must bind to the exact inspected physical row so a concurrently introduced identical-value row cannot be overwritten or deleted as collateral. When public Core metadata mutation APIs cannot supply that single-row compare-and-swap guarantee, a fixed-purpose internal post-meta persistence helper may perform the exact-row conditional mutation and compensating restoration needed to preserve the caller's inspected state. For absent-state creation, prefer normal `add_post_meta(..., true)` semantics; if a concurrent create crosses Core's non-atomic uniqueness window, remove only the row created by the current invocation and return a conflict rather than leaving Bridge-created duplicate state.
+
+The Advanced Metadata internal persistence helper is not a generic database abstraction. It is restricted to fixed `postmeta` identity/value operations after the Ability layer has already authorized one exact post/key, must not accept SQL/table/column/query text from callers, and must preserve relevant WordPress sanitization, cache invalidation, metadata hooks, and fail-closed behavior. Static checks and real WordPress integration tests must enforce that boundary.
 
 For overwrite-sensitive full-content and Workspace mutations, likewise require current object identity/fingerprints sufficient to reject stale writes. If inspected state changed, return a conflict and require refresh instead of silently overwriting newer data.
 
@@ -239,6 +248,7 @@ Outputs and logs should minimize data to what is needed for operation, diagnosis
 ## 14. Compatibility and evolution
 
 - Preserve WordPress-native behavior and public provider contracts rather than private implementation details.
+- Prefer public Core/provider APIs, but do not weaken an accepted integrity/concurrency guarantee merely because Core lacks an atomic public primitive; use the bounded internal persistence rule instead of opening a generic execution/data surface.
 - Keep provider-specific code isolated enough to retire when upstream support makes it redundant.
 - Re-check version-sensitive upstream APIs before relying on them.
 - Avoid hardcoded provider/post-type/meta-key allowlists where an administrator-controlled generic WordPress contract is the correct boundary.
@@ -255,7 +265,7 @@ Development quality must include, as applicable:
 - WordPress Coding Standards;
 - PHP compatibility checks;
 - Persian localization/catalog validation;
-- static checks for prohibited generic execution/data surfaces;
+- static checks for prohibited generic execution/data surfaces and for confinement of any fixed-purpose internal persistence helper;
 - isolated WordPress integration tests against the supported baseline and current WordPress;
 - OAuth/MCP discovery and representative execution paths;
 - optional-provider compatibility where the repository claims support;
