@@ -41,6 +41,7 @@ $GLOBALS['wpnb_issue34_meta'] = array(
 );
 $GLOBALS['wpnb_issue34_registered_meta'] = array();
 $GLOBALS['wpnb_issue34_auth_filters']    = array();
+$GLOBALS['wpnb_issue34_mapped_caps']     = null;
 
 if ( ! function_exists( 'get_post' ) ) {
 	function get_post( $post_id ) {
@@ -99,6 +100,17 @@ if ( ! function_exists( 'has_filter' ) ) {
 		return ! empty( $GLOBALS['wpnb_issue34_auth_filters'][ $hook_name ] );
 	}
 }
+if ( ! function_exists( 'get_current_user_id' ) ) {
+	function get_current_user_id() {
+		return 1;
+	}
+}
+if ( ! function_exists( 'map_meta_cap' ) ) {
+	function map_meta_cap( $capability, $user_id, ...$args ) {
+		$extra = $GLOBALS['wpnb_issue34_mapped_caps'];
+		return is_array( $extra ) ? array_merge( array( $capability ), $extra ) : array( $capability );
+	}
+}
 if ( ! function_exists( 'maybe_serialize' ) ) {
 	function maybe_serialize( $data ) {
 		return ( is_array( $data ) || is_object( $data ) ) ? serialize( $data ) : $data;
@@ -141,6 +153,19 @@ wpnb_issue34_assert(
 	$abilities->can_read( array( 'post_id' => 101, 'key' => '_builder_markup' ) ),
 	'Private non-REST CPT metadata stayed blocked after Advanced Metadata was enabled.'
 );
+
+$GLOBALS['wpnb_issue34_mapped_caps']                   = array( 'manage_options' );
+$GLOBALS['wpnb_test']['capabilities']['manage_options'] = false;
+wpnb_issue34_assert(
+	! $abilities->can_read( array( 'post_id' => 101, 'key' => '_builder_markup' ) ),
+	'Advanced Metadata ignored an additional map_meta_cap requirement.'
+);
+$GLOBALS['wpnb_test']['capabilities']['manage_options'] = true;
+wpnb_issue34_assert(
+	$abilities->can_read( array( 'post_id' => 101, 'key' => '_builder_markup' ) ),
+	'Advanced Metadata stayed blocked after the additional map_meta_cap requirement was satisfied.'
+);
+$GLOBALS['wpnb_issue34_mapped_caps'] = null;
 
 $listed = $abilities->read( array( 'post_id' => 101 ) );
 wpnb_issue34_assert( ! is_wp_error( $listed ), 'Metadata list failed.' );
