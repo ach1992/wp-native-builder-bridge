@@ -112,8 +112,11 @@ final class Post_Meta_Abilities {
 			return true;
 		}
 
-		$key = (string) $input['key'];
-		return ! $this->is_sensitive_key( $key ) && $this->can_access_meta_key( $post, $key, 'edit' );
+		$key       = (string) $input['key'];
+		$values    = $this->raw_values( $post->ID, $key );
+		$operation = empty( $values ) ? 'add' : 'edit';
+
+		return ! $this->is_sensitive_key( $key ) && $this->can_access_meta_key( $post, $key, $operation );
 	}
 
 	/**
@@ -133,8 +136,12 @@ final class Post_Meta_Abilities {
 			return false;
 		}
 
-		$values = get_post_meta( $post->ID, $key, false );
-		return $this->can_access_meta_key( $post, $key, empty( $values ) ? 'add' : 'edit' );
+		$values = $this->raw_values( $post->ID, $key );
+		if ( empty( $values ) ) {
+			return $this->can_access_meta_key( $post, $key, 'add' );
+		}
+
+		return $this->can_access_meta_key( $post, $key, 'edit' );
 	}
 
 	/**
@@ -177,7 +184,9 @@ final class Post_Meta_Abilities {
 		}
 
 		if ( '' !== $key ) {
-			$key_error = $this->validate_key_access( $post, $key, 'edit' );
+			$values    = $this->raw_values( $post->ID, $key );
+			$operation = empty( $values ) ? 'add' : 'edit';
+			$key_error = $this->validate_key_access( $post, $key, $operation );
 			if ( is_wp_error( $key_error ) ) {
 				return $key_error;
 			}
@@ -232,7 +241,7 @@ final class Post_Meta_Abilities {
 			return $this->logged_error( new WP_Error( 'post_meta_key_required', __( 'A metadata key is required.', 'wp-native-builder-bridge' ) ), $post->ID, 'wp-native-builder/post-meta-update' );
 		}
 
-		$values    = get_post_meta( $post->ID, $key, false );
+		$values    = $this->raw_values( $post->ID, $key );
 		$operation = empty( $values ) ? 'add' : 'edit';
 		$key_error = $this->validate_key_access( $post, $key, $operation );
 		if ( is_wp_error( $key_error ) ) {
@@ -241,8 +250,11 @@ final class Post_Meta_Abilities {
 		if ( count( $values ) > 1 ) {
 			return $this->logged_error( new WP_Error( 'post_meta_multiple_values_unsupported', __( 'This metadata key has multiple rows. The generic updater refuses to guess which row should be replaced.', 'wp-native-builder-bridge' ) ), $post->ID, 'wp-native-builder/post-meta-update' );
 		}
-		if ( $values && is_object( $values[0] ) ) {
+		if ( $values && $this->contains_object_or_resource( $values[0] ) ) {
 			return $this->logged_error( new WP_Error( 'post_meta_object_value_unsupported', __( 'This metadata key contains a PHP object and cannot be losslessly replaced through the generic JSON metadata contract.', 'wp-native-builder-bridge' ) ), $post->ID, 'wp-native-builder/post-meta-update' );
+		}
+		if ( $values && ! $this->is_losslessly_json_compatible( $values[0] ) ) {
+			return $this->logged_error( new WP_Error( 'post_meta_value_not_json_compatible', __( 'This metadata value cannot be represented safely through the JSON Ability contract.', 'wp-native-builder-bridge' ) ), $post->ID, 'wp-native-builder/post-meta-update' );
 		}
 
 		$current_hash = $this->state_hash( $values );
@@ -260,9 +272,50 @@ final class Post_Meta_Abilities {
 			return $this->item( $post->ID, $key, true );
 		}
 
-		$result = update_post_meta( $post->ID, $key, wp_slash( $value ) );
-		if ( false === $result ) {
-			return $this->logged_error( new WP_Error( 'post_meta_update_failed', __( 'WordPress could not update the requested metadata key.', 'wp-native-builder-bridge' ) ), $post->ID, 'wp-native-builder/post-meta-update' );
+		if ( empty( $values ) ) {
+			$result = add_post_meta( $post->ID, wp_slash( $key ), wp_slash( $value ), true );
+			if ( false === $result ) {
+				$after = $this->raw_values( $post->ID, $key );
+				if ( $this->state_hash( $after ) !== $current_hash ) {
+					return $this->logged_error( new WP_Error( 'stale_post_meta_conflict', __( 'Post metadata changed after it was read. Refresh the metadata state before updating it.', 'wp-native-builder-bridge' ) ), $post->ID, 'wp-native-builder/post-meta-update' );
+				}
+				return $this->logged_error( new WP_Error( 'post_meta_update_failed', __( 'WordPress could not update the requested metadata key.', 'wp-native-builder-bridge' ) ), $post->ID, 'wp-native-builder/post-meta-update' );
+			}
+		} else {
+			if ( empty( $values[0] ) ) {
+				return $this->logged_error( new WP_Error( 'post_meta_atomic_mutation_unsupported', __( 'WordPress cannot condition this metadata value atomically. The generic Bridge refuses the mutation to avoid a stale write.', 'wp-native-builder-bridge' ) ), $post->ID, 'wp-native-builder/post-meta-update' );
+			}
+
+			$block_fallback_add = static function ( $check, $object_id, $meta_key ) use ( $post, $key ) {
+				if ( (int) $object_id === (int) $post->ID && (string) $meta_key === $key ) {
+					return false;
+				}
+				return $check;
+			};
+
+			$filter_added = function_exists( 'add_filter' ) && function_exists( 'remove_filter' );
+			if ( $filter_added ) {
+				add_filter( 'add_post_metadata', $block_fallback_add, 10, 5 );
+			}
+			try {
+				$result = update_post_meta( $post->ID, wp_slash( $key ), wp_slash( $value ), $values[0] );
+			} finally {
+				if ( $filter_added ) {
+					remove_filter( 'add_post_metadata', $block_fallback_add, 10 );
+				}
+			}
+			if ( false === $result ) {
+				$after = $this->raw_values( $post->ID, $key );
+				if ( $this->state_hash( $after ) !== $current_hash ) {
+					return $this->logged_error( new WP_Error( 'stale_post_meta_conflict', __( 'Post metadata changed after it was read. Refresh the metadata state before updating it.', 'wp-native-builder-bridge' ) ), $post->ID, 'wp-native-builder/post-meta-update' );
+				}
+				return $this->logged_error( new WP_Error( 'post_meta_update_failed', __( 'WordPress could not update the requested metadata key.', 'wp-native-builder-bridge' ) ), $post->ID, 'wp-native-builder/post-meta-update' );
+			}
+		}
+
+		$after = $this->raw_values( $post->ID, $key );
+		if ( 1 !== count( $after ) ) {
+			return $this->logged_error( new WP_Error( 'stale_post_meta_conflict', __( 'Post metadata changed after it was read. Refresh the metadata state before updating it.', 'wp-native-builder-bridge' ) ), $post->ID, 'wp-native-builder/post-meta-update' );
 		}
 
 		$this->log->record( 'wp-native-builder/post-meta-update', 'post_meta', (int) $post->ID, true, '' );
@@ -296,7 +349,7 @@ final class Post_Meta_Abilities {
 			return $this->logged_error( $key_error, $post->ID, 'wp-native-builder/post-meta-delete' );
 		}
 
-		$values = get_post_meta( $post->ID, $key, false );
+		$values = $this->raw_values( $post->ID, $key );
 		if ( count( $values ) > 1 ) {
 			return $this->logged_error( new WP_Error( 'post_meta_multiple_values_unsupported', __( 'This metadata key has multiple rows. The generic deleter refuses to remove an ambiguous multi-row value set.', 'wp-native-builder-bridge' ) ), $post->ID, 'wp-native-builder/post-meta-delete' );
 		}
@@ -316,8 +369,20 @@ final class Post_Meta_Abilities {
 			);
 		}
 
-		if ( ! delete_post_meta( $post->ID, $key ) ) {
+		if ( '' === $values[0] || null === $values[0] || false === $values[0] ) {
+			return $this->logged_error( new WP_Error( 'post_meta_atomic_mutation_unsupported', __( 'WordPress cannot condition this metadata value atomically. The generic Bridge refuses the mutation to avoid a stale write.', 'wp-native-builder-bridge' ) ), $post->ID, 'wp-native-builder/post-meta-delete' );
+		}
+
+		if ( ! delete_post_meta( $post->ID, wp_slash( $key ), wp_slash( $values[0] ) ) ) {
+			$after = $this->raw_values( $post->ID, $key );
+			if ( $this->state_hash( $after ) !== $current_hash ) {
+				return $this->logged_error( new WP_Error( 'stale_post_meta_conflict', __( 'Post metadata changed after it was read. Refresh the metadata state before deleting it.', 'wp-native-builder-bridge' ) ), $post->ID, 'wp-native-builder/post-meta-delete' );
+			}
 			return $this->logged_error( new WP_Error( 'post_meta_delete_failed', __( 'WordPress could not delete the requested metadata key.', 'wp-native-builder-bridge' ) ), $post->ID, 'wp-native-builder/post-meta-delete' );
+		}
+
+		if ( ! empty( $this->raw_values( $post->ID, $key ) ) ) {
+			return $this->logged_error( new WP_Error( 'stale_post_meta_conflict', __( 'Post metadata changed after it was read. Refresh the metadata state before deleting it.', 'wp-native-builder-bridge' ) ), $post->ID, 'wp-native-builder/post-meta-delete' );
 		}
 
 		$this->log->record( 'wp-native-builder/post-meta-delete', 'post_meta', (int) $post->ID, true, '' );
@@ -338,6 +403,13 @@ final class Post_Meta_Abilities {
 	private function authorized_post( $post_id ) {
 		if ( $post_id < 1 ) {
 			return null;
+		}
+
+		if ( function_exists( 'wp_is_post_revision' ) ) {
+			$parent_id = wp_is_post_revision( $post_id );
+			if ( $parent_id ) {
+				$post_id = (int) $parent_id;
+			}
 		}
 
 		$post = get_post( $post_id );
@@ -466,10 +538,21 @@ final class Post_Meta_Abilities {
 	 * @return bool
 	 */
 	private function is_sensitive_key( $key ) {
-		$normalized = strtolower( str_replace( array( '-', '.', ':' ), '_', (string) $key ) );
-		return 1 === preg_match(
-			'/(^|_)(password|passwd|secret|credential|credentials|access_token|refresh_token|bearer_token|auth_token|oauth_token|api_key|apikey|private_key|application_password|client_secret|consumer_secret)($|_)/',
+		$key_with_boundaries = preg_replace( '/(?<=[a-z0-9])(?=[A-Z])/', '_', (string) $key );
+		$normalized          = strtolower( (string) preg_replace( '/[^A-Za-z0-9]+/', '_', (string) $key_with_boundaries ) );
+		$normalized          = trim( $normalized, '_' );
+		$compact             = str_replace( '_', '', $normalized );
+
+		if ( 1 === preg_match(
+			'/(^|_)(password|passwd|secret|credential|credentials|access_token|accesstoken|refresh_token|refreshtoken|bearer_token|bearertoken|auth_token|authtoken|oauth_token|oauthtoken|api_token|apitoken|api_key|apikey|private_key|privatekey|application_password|applicationpassword|client_secret|clientsecret|consumer_secret|consumersecret)($|_)/',
 			$normalized
+		) ) {
+			return true;
+		}
+
+		return 1 === preg_match(
+			'/(password|passwd|secret|credential|credentials|accesstoken|refreshtoken|bearertoken|authtoken|oauthtoken|apitoken|apikey|privatekey|applicationpassword|clientsecret|consumersecret)$/',
+			$compact
 		);
 	}
 
@@ -482,16 +565,16 @@ final class Post_Meta_Abilities {
 	 * @return array<string,mixed>|WP_Error
 	 */
 	private function item( $post_id, $key, $include_values ) {
-		$values      = get_post_meta( $post_id, $key, false );
+		$values      = $this->raw_values( $post_id, $key );
 		$value_types = array();
 		$encoded     = array();
 
 		foreach ( $values as $value ) {
 			$value_types[] = $this->value_type( $value );
 			if ( $include_values ) {
-				$json = wp_json_encode( $value, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE );
-				if ( false === $json ) {
-					return new WP_Error( 'post_meta_value_not_json_compatible', __( 'This metadata value cannot be represented safely through the JSON Ability contract.', 'wp-native-builder-bridge' ) );
+				$json = $this->encode_lossless_value( $value );
+				if ( is_wp_error( $json ) ) {
+					return $json;
 				}
 				$encoded[] = array(
 					'type'       => $this->value_type( $value ),
@@ -507,6 +590,94 @@ final class Post_Meta_Abilities {
 			'value_types' => array_values( array_unique( $value_types ) ),
 			'values'      => $encoded,
 		);
+	}
+
+	/**
+	 * Returns physical post-meta rows without registered default expansion.
+	 *
+	 * @param int    $post_id Post ID.
+	 * @param string $key     Exact canonical unslashed metadata key.
+	 * @return array<int,mixed>
+	 */
+	private function raw_values( $post_id, $key ) {
+		if ( function_exists( 'get_metadata_raw' ) ) {
+			$values = get_metadata_raw( 'post', $post_id, $key, false );
+			return is_array( $values ) ? array_values( $values ) : array();
+		}
+
+		$values = get_post_meta( $post_id, $key, false );
+		return is_array( $values ) ? array_values( $values ) : array();
+	}
+
+	/**
+	 * Encodes one metadata value only when JSON round-tripping is structurally lossless.
+	 *
+	 * @param mixed $value Metadata value.
+	 * @return string|WP_Error
+	 */
+	private function encode_lossless_value( $value ) {
+		if ( ! $this->is_losslessly_json_compatible( $value ) ) {
+			return new WP_Error( 'post_meta_value_not_json_compatible', __( 'This metadata value cannot be represented safely through the JSON Ability contract.', 'wp-native-builder-bridge' ) );
+		}
+
+		try {
+			return json_encode( $value, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR );
+		} catch ( \JsonException $exception ) {
+			return new WP_Error( 'post_meta_value_not_json_compatible', __( 'This metadata value cannot be represented safely through the JSON Ability contract.', 'wp-native-builder-bridge' ) );
+		}
+	}
+
+	/**
+	 * Detects objects/resources anywhere inside a metadata value.
+	 *
+	 * @param mixed $value Metadata value.
+	 * @param int   $depth Current recursion depth.
+	 * @return bool
+	 */
+	private function contains_object_or_resource( $value, $depth = 0 ) {
+		if ( $depth > 64 || is_object( $value ) || is_resource( $value ) ) {
+			return true;
+		}
+
+		if ( is_array( $value ) ) {
+			foreach ( $value as $nested ) {
+				if ( $this->contains_object_or_resource( $nested, $depth + 1 ) ) {
+					return true;
+				}
+			}
+		}
+
+		return false;
+	}
+
+	/**
+	 * Checks whether a metadata value survives the generic JSON contract exactly.
+	 *
+	 * @param mixed $value Metadata value.
+	 * @param int   $depth Current recursion depth.
+	 * @return bool
+	 */
+	private function is_losslessly_json_compatible( $value, $depth = 0 ) {
+		if ( $depth > 64 || is_object( $value ) || is_resource( $value ) ) {
+			return false;
+		}
+
+		if ( is_array( $value ) ) {
+			foreach ( $value as $nested ) {
+				if ( ! $this->is_losslessly_json_compatible( $nested, $depth + 1 ) ) {
+					return false;
+				}
+			}
+		}
+
+		try {
+			$json    = json_encode( $value, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR );
+			$decoded = json_decode( $json, true, 512, JSON_THROW_ON_ERROR );
+		} catch ( \JsonException $exception ) {
+			return false;
+		}
+
+		return $decoded === $value;
 	}
 
 	/**
