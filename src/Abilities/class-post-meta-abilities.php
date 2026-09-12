@@ -60,7 +60,7 @@ final class Post_Meta_Abilities {
 				'description'         => __( 'Creates or replaces one single-value metadata key after checking Advanced Metadata access, WordPress authority, and the expected metadata state.', 'wp-native-builder-bridge' ),
 				'category'            => Registrar::CATEGORY,
 				'input_schema'        => $this->update_input_schema(),
-				'output_schema'       => $this->item_schema( true ),
+				'output_schema'       => $this->item_schema(),
 				'execute_callback'    => array( $this, 'update' ),
 				'permission_callback' => array( $this, 'can_update' ),
 				'meta'                => $this->meta( false, false, true ),
@@ -134,8 +134,7 @@ final class Post_Meta_Abilities {
 		}
 
 		$values = get_post_meta( $post->ID, $key, false );
-		$action = empty( $values ) ? 'add' : 'edit';
-		return $this->can_access_meta_key( $post, $key, $action );
+		return $this->can_access_meta_key( $post, $key, empty( $values ) ? 'add' : 'edit' );
 	}
 
 	/**
@@ -184,7 +183,10 @@ final class Post_Meta_Abilities {
 			}
 
 			$item = $this->item( $post->ID, $key, $include_values );
-			return is_wp_error( $item ) ? $item : array(
+			if ( is_wp_error( $item ) ) {
+				return $item;
+			}
+			return array(
 				'post_id'   => (int) $post->ID,
 				'post_type' => (string) $post->post_type,
 				'items'     => array( $item ),
@@ -230,7 +232,7 @@ final class Post_Meta_Abilities {
 			return $this->logged_error( new WP_Error( 'post_meta_key_required', __( 'A metadata key is required.', 'wp-native-builder-bridge' ) ), $post->ID, 'wp-native-builder/post-meta-update' );
 		}
 
-		$values   = get_post_meta( $post->ID, $key, false );
+		$values    = get_post_meta( $post->ID, $key, false );
 		$operation = empty( $values ) ? 'add' : 'edit';
 		$key_error = $this->validate_key_access( $post, $key, $operation );
 		if ( is_wp_error( $key_error ) ) {
@@ -238,6 +240,9 @@ final class Post_Meta_Abilities {
 		}
 		if ( count( $values ) > 1 ) {
 			return $this->logged_error( new WP_Error( 'post_meta_multiple_values_unsupported', __( 'This metadata key has multiple rows. The generic updater refuses to guess which row should be replaced.', 'wp-native-builder-bridge' ) ), $post->ID, 'wp-native-builder/post-meta-update' );
+		}
+		if ( $values && is_object( $values[0] ) ) {
+			return $this->logged_error( new WP_Error( 'post_meta_object_value_unsupported', __( 'This metadata key contains a PHP object and cannot be losslessly replaced through the generic JSON metadata contract.', 'wp-native-builder-bridge' ) ), $post->ID, 'wp-native-builder/post-meta-update' );
 		}
 
 		$current_hash = $this->state_hash( $values );
@@ -251,9 +256,8 @@ final class Post_Meta_Abilities {
 			return $this->logged_error( $value, $post->ID, 'wp-native-builder/post-meta-update' );
 		}
 
-		if ( 1 === count( $values ) && serialize( $values[0] ) === serialize( $value ) ) {
-			$item = $this->item( $post->ID, $key, true );
-			return is_wp_error( $item ) ? $item : $item;
+		if ( 1 === count( $values ) && $current_hash === $this->state_hash( array( $value ) ) ) {
+			return $this->item( $post->ID, $key, true );
 		}
 
 		$result = update_post_meta( $post->ID, $key, wp_slash( $value ) );
@@ -262,8 +266,7 @@ final class Post_Meta_Abilities {
 		}
 
 		$this->log->record( 'wp-native-builder/post-meta-update', 'post_meta', (int) $post->ID, true, '' );
-		$item = $this->item( $post->ID, $key, true );
-		return is_wp_error( $item ) ? $item : $item;
+		return $this->item( $post->ID, $key, true );
 	}
 
 	/**
@@ -273,9 +276,14 @@ final class Post_Meta_Abilities {
 	 * @return array<string,mixed>|WP_Error
 	 */
 	public function delete( $input ) {
+		$post_id = is_array( $input ) && isset( $input['post_id'] ) ? (int) $input['post_id'] : 0;
+		if ( ! $this->permissions->allowed( Settings::GROUP_USERS_DESTRUCTIVE, 'read' ) ) {
+			return $this->logged_error( new WP_Error( 'destructive_access_disabled', __( 'Users & Destructive access is required before deleting post metadata.', 'wp-native-builder-bridge' ) ), $post_id, 'wp-native-builder/post-meta-delete' );
+		}
+
 		$post = $this->validated_post( $input );
 		if ( is_wp_error( $post ) ) {
-			return $this->logged_error( $post, isset( $input['post_id'] ) ? (int) $input['post_id'] : 0, 'wp-native-builder/post-meta-delete' );
+			return $this->logged_error( $post, $post_id, 'wp-native-builder/post-meta-delete' );
 		}
 
 		$key = isset( $input['key'] ) ? (string) $input['key'] : '';
@@ -322,7 +330,7 @@ final class Post_Meta_Abilities {
 	}
 
 	/**
-	 * Returns a post only when it is a generic eligible content target the user may edit.
+	 * Returns a post only when it is eligible generic content the user may edit.
 	 *
 	 * @param int $post_id Post ID.
 	 * @return object|null
@@ -339,7 +347,7 @@ final class Post_Meta_Abilities {
 	}
 
 	/**
-	 * Validates common target and group access inside execute callbacks.
+	 * Validates common target and Advanced Metadata access inside execute callbacks.
 	 *
 	 * @param array<string,mixed> $input Ability input.
 	 * @return object|WP_Error
@@ -376,12 +384,6 @@ final class Post_Meta_Abilities {
 	/**
 	 * Preserves explicit provider/Core meta authorization while allowing deliberately
 	 * enabled private unregistered metadata through the post's own edit capability.
-	 *
-	 * WordPress maps protected unregistered metadata to do_not_allow by default. That
-	 * generic default is useful for ordinary Custom Fields UI but would make the
-	 * administrator-controlled Advanced Metadata group unable to reach private builder
-	 * storage. If a provider registered the key or installed an auth filter, its explicit
-	 * contract remains authoritative and the normal meta capability is enforced.
 	 *
 	 * @param object $post      Post object.
 	 * @param string $key       Exact metadata key.
@@ -433,7 +435,7 @@ final class Post_Meta_Abilities {
 	}
 
 	/**
-	 * Denies credential-like metadata keys without a provider allowlist.
+	 * Denies credential-like metadata keys without introducing provider allowlists.
 	 *
 	 * @param string $key Metadata key.
 	 * @return bool
@@ -503,7 +505,7 @@ final class Post_Meta_Abilities {
 	 * @return string
 	 */
 	private function state_hash( $values ) {
-		return hash( 'sha256', serialize( array_values( $values ) ) );
+		return hash( 'sha256', (string) maybe_serialize( array_values( $values ) ) );
 	}
 
 	/**
@@ -547,11 +549,7 @@ final class Post_Meta_Abilities {
 		return $error;
 	}
 
-	/**
-	 * Read input schema.
-	 *
-	 * @return array<string,mixed>
-	 */
+	/** @return array<string,mixed> */
 	private function read_input_schema() {
 		return array(
 			'type'                 => 'object',
@@ -565,11 +563,7 @@ final class Post_Meta_Abilities {
 		);
 	}
 
-	/**
-	 * Update input schema.
-	 *
-	 * @return array<string,mixed>
-	 */
+	/** @return array<string,mixed> */
 	private function update_input_schema() {
 		return array(
 			'type'                 => 'object',
@@ -584,11 +578,7 @@ final class Post_Meta_Abilities {
 		);
 	}
 
-	/**
-	 * Delete input schema.
-	 *
-	 * @return array<string,mixed>
-	 */
+	/** @return array<string,mixed> */
 	private function delete_input_schema() {
 		return array(
 			'type'                 => 'object',
@@ -602,58 +592,43 @@ final class Post_Meta_Abilities {
 		);
 	}
 
-	/**
-	 * Read output schema.
-	 *
-	 * @return array<string,mixed>
-	 */
+	/** @return array<string,mixed> */
 	private function read_output_schema() {
 		return array(
 			'type'                 => 'object',
 			'properties'           => array(
 				'post_id'   => array( 'type' => 'integer' ),
 				'post_type' => array( 'type' => 'string' ),
-				'items'     => array( 'type' => 'array', 'items' => $this->item_schema( true ) ),
+				'items'     => array( 'type' => 'array', 'items' => $this->item_schema() ),
 			),
 			'required'             => array( 'post_id', 'post_type', 'items' ),
 			'additionalProperties' => false,
 		);
 	}
 
-	/**
-	 * Metadata item schema.
-	 *
-	 * @param bool $with_values Include values property.
-	 * @return array<string,mixed>
-	 */
-	private function item_schema( $with_values ) {
-		$properties = array(
-			'key'         => array( 'type' => 'string' ),
-			'count'       => array( 'type' => 'integer' ),
-			'state_hash'  => array( 'type' => 'string' ),
-			'value_types' => array( 'type' => 'array', 'items' => array( 'type' => 'string' ) ),
-		);
-		$required = array( 'key', 'count', 'state_hash', 'value_types' );
-		if ( $with_values ) {
-			$properties['values'] = array(
-				'type'  => 'array',
-				'items' => array(
-					'type'                 => 'object',
-					'properties'           => array(
-						'type'       => array( 'type' => 'string' ),
-						'value_json' => array( 'type' => 'string' ),
-					),
-					'required'             => array( 'type', 'value_json' ),
-					'additionalProperties' => false,
-				),
-			);
-			$required[] = 'values';
-		}
-
+	/** @return array<string,mixed> */
+	private function item_schema() {
 		return array(
 			'type'                 => 'object',
-			'properties'           => $properties,
-			'required'             => $required,
+			'properties'           => array(
+				'key'         => array( 'type' => 'string' ),
+				'count'       => array( 'type' => 'integer' ),
+				'state_hash'  => array( 'type' => 'string' ),
+				'value_types' => array( 'type' => 'array', 'items' => array( 'type' => 'string' ) ),
+				'values'      => array(
+					'type'  => 'array',
+					'items' => array(
+						'type'                 => 'object',
+						'properties'           => array(
+							'type'       => array( 'type' => 'string' ),
+							'value_json' => array( 'type' => 'string' ),
+						),
+						'required'             => array( 'type', 'value_json' ),
+						'additionalProperties' => false,
+					),
+				),
+			),
+			'required'             => array( 'key', 'count', 'state_hash', 'value_types', 'values' ),
 			'additionalProperties' => false,
 		);
 	}
