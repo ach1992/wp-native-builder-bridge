@@ -19,6 +19,9 @@ The baseline installation registers the core Bridge surfaces below. Optional Gra
 | `post-meta-read` | Advanced Metadata | Discover physical post-meta keys or read one exact physical key for a WordPress post object the connected user may edit. Values are returned only for an explicitly named key. |
 | `post-meta-update` | Advanced Metadata | Create/replace one single-value post-meta key with exact physical-row state identity and stale-write protection. Ambiguous or non-lossless cases fail closed. |
 | `post-meta-delete` | Advanced Metadata + Users & Destructive | Delete one single-value post-meta row with exact physical-row state identity and row-scoped stale-write protection. |
+| `term-meta-read` | Advanced Metadata | List bounded physical term-meta key/count summaries or read one exact key for an authorized `term_id` + `taxonomy` target. |
+| `term-meta-update` | Advanced Metadata | Create/replace one losslessly representable term-meta value using exact physical state and row-level stale-write protection. |
+| `term-meta-delete` | Advanced Metadata + Users & Destructive | Delete one exact term-meta row with stale-write protection; ambiguous or lossy values fail closed. |
 | `media-read` | Site Read | Read Media Library attachments. |
 | `media-upload` | Builder Write | Upload bounded file bytes through WordPress Media APIs. |
 | `media-update` | Builder Write | Update bounded attachment metadata/parent. |
@@ -61,6 +64,24 @@ Creation uses normal WordPress `add_post_meta(..., true)` semantics. Core perfor
 The compare-and-swap helper is not a database tool exposed to callers: it accepts no caller-controlled SQL, table, column, query fragment, or row ID and is hard-bound to the authorized `wp_postmeta` row. Its fixed prepared raw update/delete statements exist only to provide byte-exact predicates that WordPress's generic text-column helpers cannot express. Generic SQL/database administration remains absent. This is an optimistic row-level integrity protocol, not a transaction/serializable-isolation guarantee; a later write after the verified operation can immediately make a returned state hash stale.
 
 Metadata values containing PHP objects/resources at any depth, or other values that cannot round-trip through the generic JSON contract without structural loss, are not generically replaceable or deletable. Metadata deletion additionally requires **Users & Destructive**.
+
+## Generic term metadata
+
+The same default-off **Advanced Metadata** group controls `term-meta-read`, `term-meta-update`, and `term-meta-delete`. Every request requires both an integer `term_id` and its exact `taxonomy` name. Core categories, tags, and registered custom taxonomies (including non-public/non-REST taxonomies) use the same provider-neutral implementation. There is no taxonomy or meta-key allowlist and no WooCommerce/theme-specific adapter.
+
+The term must resolve unambiguously through WordPress, agree with Core's metadata subtype, and pass `edit_term` for that exact target. Legacy shared term IDs are refused even when a taxonomy was supplied, because the physical term-meta owner and Core capability/subtype resolution would otherwise be ambiguous. Registered metadata and all explicit provider authorization filters remain authoritative. For a protected unregistered key only, a temporary exact user/term/key/operation authorization filter replaces Core's default protected-key denial; it does not remove any final `map_meta_cap` requirement or change the original `user_has_cap` context. This filter is removed before the Ability returns.
+
+Read inputs add `page` (1..10000, default 1) and `per_page` (1..100, default 50). Without a key, items contain **only `key` and `count`**. They never contain values, value-derived hashes, or types. Pagination advances through physical key pages before authorization/secret filtering, so a page may be short or empty while `has_more` is true. Treat `has_more` as navigation, not a total-count promise; concurrent metadata changes may move keys between pages.
+
+A named-key read returns the normal `key`, `count`, `state_hash`, `value_types`, and `values` fields inside `items`. `include_values=true` is allowed only for a named key. Read output also identifies `term_id`, `taxonomy`, `page`, `per_page`, and `has_more`. Exact reads inspect at most two physical rows and reject a multi-row key; listing can still report its count. Read that exact key again immediately before a mutation to obtain `expected_state_hash`.
+
+Update accepts `key`, `value_json`, and `expected_state_hash` in addition to the target. It returns the verified metadata item. Delete accepts `key` and `expected_state_hash`, also requires **Users & Destructive**, and returns `term_id`, `key`, `deleted`, and `state_hash`. Deleting an already absent key with the current empty-state hash returns `deleted=false`.
+
+Term values have a 1 MiB byte bound for submitted JSON and physical/sanitized stored data. PHP objects/enums/resources, excessive depth, non-finite numbers, malformed/non-canonical serialization, reference structures lost by JSON, integer overflow, and JSON object shapes that PHP's array contract would silently change are refused. For example, `{}` and an object consisting only of sequential numeric keys cannot be losslessly mapped by this interface. Safe scalars/arrays still use normal WordPress metadata coercion: a newly stored scalar is normally returned as a string, while SQL `NULL` is a distinct physical state. Existing opaque metadata may be inspected for type/state without exposing its value, but cannot be replaced or deleted generically.
+
+Registered defaults and `get_term_metadata` virtual reads do not determine physical state. Creation uses Core `add_term_meta(..., true)` with one sanitizer pass; a non-null provider short circuit is refused instead of being treated as ownership of its returned row ID. Updates/deletes use a term-only fixed-schema persistence helper for byte-exact row CAS, normal term metadata lifecycle actions, cache invalidation, and bounded compensation. Create contention removes only the original invocation's unchanged row, including when other rows precede it; an observer-modified row is preserved and reported as stale. Compensation failure is explicit and requires fresh inspection rather than an automatic overwrite/retry.
+
+This is an optimistic row-level integrity protocol, not a transaction or serializable isolation guarantee. A later external write may immediately stale a returned hash. Nothing in these abilities grants arbitrary SQL/options/user-meta/provider-table access, changes the administrator's group defaults, or deploys a release.
 
 ## Optional Code Snippets fallback
 

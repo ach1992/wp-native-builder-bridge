@@ -135,7 +135,7 @@ Keep a small grouped permission model rather than dozens of per-tool switches.
 | **Builder Write** | drafts/content/blocks, media, taxonomies, navigation, forms, Workspace mutations | Disabled |
 | **Live Content** | publish/update live content and other live-status transitions | Disabled |
 | **Site Configuration** | bounded global WordPress/theme configuration | Disabled |
-| **Advanced Metadata** | generic post-meta inspection/update for WordPress post objects the connected user may edit; delete additionally requires Users & Destructive | Disabled |
+| **Advanced Metadata** | generic post/term-meta inspection/update for exact WordPress objects the connected user may edit; delete additionally requires Users & Destructive | Disabled |
 | **Code & Extensions** | supported managed snippets and plugin/theme lifecycle | Disabled |
 | **Users & Destructive** | user/role administration and destructive operations | Disabled |
 
@@ -195,6 +195,12 @@ For overwrite-sensitive full-content and Workspace mutations, likewise require c
 Targeted block operations may use a block/content fingerprint appropriate to the mutation boundary while preserving unrelated blocks.
 
 Destructive states and permanent deletion remain separately permission-gated.
+
+### Term metadata extension
+
+The same disabled-by-default Advanced Metadata group also owns generic term metadata. Every target requires an exact registered taxonomy plus an unambiguous term ID that agrees with WordPress's subtype/capability resolution. Do not introduce taxonomy/provider/key allowlists. Preserve `edit_term` and operation-specific metadata authority, registered/provider authorization and extra mapped requirements; protected unregistered metadata may override only Core's generic protected-key default after explicit administrator opt-in. Delete also requires Users & Destructive.
+
+Term persistence remains a separate fixed-purpose `termmeta` helper: bounded key-only listing and exact physical reads, byte-exact row CAS, Core-owned one-pass creation, row-owned compensation, term metadata hooks/cache consistency, opaque/lossy-value refusal, and secret-free mutation logs. Share the unchanged credential-key policy, not post-specific object/lifecycle assumptions. Static checks and both real WordPress lanes must prove these boundaries while retaining all post-meta regressions.
 
 ## 9. Media and extension installation
 

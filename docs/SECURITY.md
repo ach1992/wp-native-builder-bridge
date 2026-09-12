@@ -20,9 +20,9 @@ OAuth never enables a Bridge access group and never grants a WordPress capabilit
 - **Builder Write** — bounded content/site-building mutations.
 - **Live Content** — publishing and other live-state transitions.
 - **Site Configuration** — bounded global configuration.
-- **Advanced Metadata** — protected/private post metadata for WordPress post objects the connected user may edit; disabled by default and intentionally separate from ordinary Site Read/Builder Write access.
+- **Advanced Metadata** — protected/private post and term metadata for exact WordPress objects the connected user may edit; disabled by default and intentionally separate from ordinary Site Read/Builder Write access.
 - **Code & Extensions** — managed snippets and extension lifecycle.
-- **Users & Destructive** — user administration and destructive operations. Generic post-meta deletion requires this group in addition to Advanced Metadata.
+- **Users & Destructive** — user administration and destructive operations. Generic post-meta and term-meta deletion require this group in addition to Advanced Metadata.
 
 Only Site Read is enabled by default.
 
@@ -53,13 +53,27 @@ The boundary is deliberately layered:
 - metadata values containing PHP objects/resources at any depth, or values that do not survive the generic JSON contract structurally unchanged, are not generically replaceable or deletable;
 - delete additionally requires Users & Destructive access.
 
-The exact-row compare-and-swap helper is an internal fixed-purpose implementation detail, not an API surface. It accepts no SQL, table name, column name, meta ID, query fragment, or database selector from the MCP client; it is hard-bound to the already-authorized `wp_postmeta` row. The only raw SQL is the fixed prepared byte-exact update/delete predicate required to avoid database-collation equivalence. Static safety checks confine these two logical exact-row operations to six fixed prepared SQL branches in the post-meta store and keep direct database use forbidden everywhere else in production source. The Bridge still exposes no arbitrary SQL or general database administration.
+The exact-row compare-and-swap helper is an internal fixed-purpose implementation detail, not an API surface. It accepts no SQL, table name, column name, meta ID, query fragment, or database selector from the MCP client; it is hard-bound to the already-authorized `wp_postmeta` row. The only raw SQL is the fixed prepared byte-exact update/delete predicate required to avoid database-collation equivalence. Static safety checks confine these two logical exact-row operations to six fixed prepared SQL branches in the post-meta store and keep direct database use forbidden elsewhere in production source except the separately confined term-meta store described below. The Bridge still exposes no arbitrary SQL or general database administration.
 
 This mechanism provides a bounded row-level stale-write/compensation protocol, not a database transaction or serializable isolation guarantee. A write that occurs after the Bridge's verified linearization point is simply a newer state and can make the returned `state_hash` stale immediately, as with any optimistic-concurrency token.
 
+## Advanced term metadata boundary
+
+Issue #36 extends the same default-off group to term metadata, without changing the post-meta persistence or authorization implementation. The secret-key normalization is shared verbatim with post metadata rather than duplicated.
+
+Term identity is **both `term_id` and `taxonomy`**: the taxonomy must be registered, explicit and canonical term resolution must agree, Core's term metadata subtype must agree, and shared legacy term IDs fail closed. WordPress `edit_term` and operation-specific `add_term_meta`, `edit_term_meta`, or `delete_term_meta` mapping determine authority; no global `manage_categories` or `manage_options` substitutes for it. Protected unregistered metadata may override only Core's default protected-key denial under explicit administrator opt-in. The narrowly scoped temporary authorization callback preserves subsequent provider/mapped denials, additional primitive requirements, `do_not_allow`, and original `user_has_cap` object/key context. Registered/global/subtype metadata authorization and explicit authorization filters, including priority zero, are never replaced. Delete additionally requires Users & Destructive.
+
+The term store is separate because term identity, subtype resolution, shared-term behavior and lifecycle differ from posts. It is fixed to `$wpdb->termmeta`: two fixed prepared bounded reads, six fixed byte-exact update/delete CAS branches, and one fixed-column restoration of the original deleted row. There is no client-supplied table, SQL/query fragment, physical row ID or schema selector. Key-only listing queries never load metadata values. Exact reads are limited to two rows and 1 MiB per stored value; SQL errors are not interpreted as absence. Static checks retain the existing post-store restrictions and separately confine the term store.
+
+Term state identity includes physical row ID and typed raw bytes, preserving SQL `NULL` versus empty string and distinguishing absent rows from registered defaults. Stored serialization is preflighted as a complete scalar/array-only stream before native decoding, preventing object/enum autoloading. Decoding additionally disables classes and bounds depth; objects/resources, malformed/non-canonical serialization and structures that cannot round-trip through JSON are not generically exposed as values, replaced, or deleted. Sanitized output is checked before serialization/persistence. Core sanitization runs once, not twice.
+
+Existing-row update/delete is guarded after the pre-mutation lifecycle hook, then byte-exactly conditions only the previously authorized physical row. Normal `add_term_meta` owns creation. Original-invocation add observation distinguishes actual row ownership from nested/provider-returned IDs. Create contention cleans only the unchanged Bridge-owned row; observer-modified state is not adopted or removed. Update compensation can restore only bytes the Bridge still owns; delete compensation restores only the original physical row ID and refuses to recreate a deleted/shared term's metadata. Compensating lifecycle events and metadata cache invalidation accompany actual compensation. Compensation is not an unrestricted rollback of concurrent writes.
+
+The protocol provides bounded optimistic integrity, not serializable isolation. Trusted installed WordPress code can independently change state; newer writes after verification can stale a response immediately. A compensation failure is a diagnostic boundary requiring fresh inspection, not permission to overwrite newer state. The mutation log contains only ability/target type/target ID/status/error code, never term-meta keys, values, full payloads or credentials.
+
 ## Stale-write protection
 
-Overwrite-sensitive content, post-metadata, and Workspace operations return change identities. A later update must present the expected current identity. If the object changed after inspection, the Bridge rejects the write and requires the caller to refresh.
+Overwrite-sensitive content, post-metadata, term-metadata, and Workspace operations return change identities. A later update must present the expected current identity. If the object changed after inspection, the Bridge rejects the write and requires the caller to refresh.
 
 Post metadata uses deterministic physical-row identity plus byte-exact row compare-and-swap. Verification is performed within the bounded persistence operation. Concurrent duplicate/add/update/delete interference detected before that verification completes is reported as stale; where the Bridge already changed one row, it performs row-scoped compensation and corresponding lifecycle actions rather than overwriting/deleting concurrent state. If the exact compensation predicate no longer matches, the operation returns a dedicated compensation failure instead of overwriting newer bytes or claiming success.
 

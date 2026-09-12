@@ -7,6 +7,7 @@
 
 namespace WP_Native_Builder_Bridge\Abilities;
 
+use WP_Native_Builder_Bridge\Support\Metadata_Key_Policy;
 use WP_Native_Builder_Bridge\Support\Mutation_Log;
 use WP_Native_Builder_Bridge\Support\Permissions;
 use WP_Native_Builder_Bridge\Support\Post_Meta_Store;
@@ -562,23 +563,7 @@ final class Post_Meta_Abilities {
 	 * @return bool
 	 */
 	private function is_sensitive_key( $key ) {
-		$bounded    = preg_replace( '/(?<=[a-z0-9])(?=[A-Z])/', '_', (string) $key );
-		$normalized = strtolower( (string) preg_replace( '/[^A-Za-z0-9]+/', '_', (string) $bounded ) );
-		$normalized = trim( $normalized, '_' );
-		$compact    = str_replace( '_', '', $normalized );
-
-		$single = '(passwords?|passwds?|secrets?|credentials?)';
-		$pairs  = '(access|refresh|bearer|auth|oauth|api|session|identity|id|jwt|security|csrf)_(tokens?)'
-			. '|(api)_(keys?)'
-			. '|(private)_(keys?)'
-			. '|(application)_(passwords?)'
-			. '|(client|consumer)_(secrets?)';
-		if ( 1 === preg_match( '/(^|_)(' . $single . '|' . $pairs . ')($|_)/', $normalized ) ) {
-			return true;
-		}
-
-		$compact_pairs = '(accesstokens?|refreshtokens?|bearertokens?|authtokens?|oauthtokens?|apitokens?|sessiontokens?|identitytokens?|idtokens?|jwttokens?|securitytokens?|csrftokens?|apikeys?|privatekeys?|applicationpasswords?|clientsecrets?|consumersecrets?)';
-		return 1 === preg_match( '/(' . $single . '|' . $compact_pairs . ')$/', $compact );
+		return Metadata_Key_Policy::is_sensitive( $key );
 	}
 
 	/**

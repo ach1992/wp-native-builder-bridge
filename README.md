@@ -12,7 +12,7 @@ It exposes bounded, typed site-management abilities while keeping WordPress capa
 
 - Direct ChatGPT Workspace App connection over HTTPS with OAuth 2.1 and PKCE.
 - Read and update posts, pages, supported custom post types, revisions, and Gutenberg blocks.
-- Admin-controlled generic post-metadata access for WordPress post objects the connected user may edit, including protected/private builder metadata without provider/post-type/meta-key allowlists.
+- Admin-controlled generic post/term metadata access for exact WordPress objects the connected user may edit, including protected/private metadata without provider/post-type/taxonomy/meta-key allowlists.
 - Media Library read, upload, update, and delete operations.
 - Taxonomy and classic navigation management.
 - Bounded WordPress site settings.
@@ -74,7 +74,7 @@ Workspace state is private to WordPress and is not exposed through ordinary post
 
 ## Access groups
 
-Bridge permissions are additive to normal WordPress capabilities. Enabling a Bridge group never grants a WordPress capability the connected user does not already have. Advanced Metadata is a deliberate exception to WordPress's generic protected-unregistered-meta default denial: when an administrator enables the group, protected unregistered post metadata may be accessed through the exact target post's `edit_post` authority. Explicit registered/provider metadata authorization contracts remain authoritative.
+Bridge permissions are additive to normal WordPress capabilities. Enabling a Bridge group never grants a WordPress capability the connected user does not already have. Advanced Metadata is a deliberate exception to WordPress's generic protected-unregistered-meta default denial: when an administrator enables the group, protected unregistered post/term metadata may be accessed through the exact target's `edit_post`/`edit_term` authority. Explicit registered/provider metadata authorization contracts remain authoritative.
 
 | Group | Purpose |
 | --- | --- |
@@ -82,7 +82,7 @@ Bridge permissions are additive to normal WordPress capabilities. Enabling a Bri
 | **Builder Write** | Create and update drafts, content, Gutenberg blocks, media, taxonomies, navigation, forms, and Workspace objects. |
 | **Live Content** | Permit publishing and other live-content status changes when WordPress also permits them. |
 | **Site Configuration** | Permit bounded global WordPress/theme configuration changes. |
-| **Advanced Metadata** | Permit generic read/update of protected/private post metadata for post objects the connected user may edit, including private/non-REST CPTs; credential-like keys, options, user meta, and Workspace internals remain excluded. |
+| **Advanced Metadata** | Permit generic read/update of protected/private post and term metadata for exact objects the connected user may edit, including private/non-REST CPTs and taxonomies; credential-like keys, options, user meta, and Workspace internals remain excluded. |
 | **Code & Extensions** | Permit supported managed-snippet and plugin/theme lifecycle operations. |
 | **Users & Destructive** | Permit user/role administration and destructive operations when WordPress also permits them. Metadata deletion requires this group in addition to Advanced Metadata. |
 
@@ -96,7 +96,7 @@ Plugin/theme installation is deliberately narrower: it accepts WordPress.org slu
 
 ## Optional integrations
 
-Integration is discovery-first: provider-owned public WordPress Abilities are reused at runtime, so a compatible new plugin or theme should normally require no Bridge-specific code. Provider fallbacks are reserved for bounded gaps with documented public APIs. Generic post metadata is provider- and post-type-neutral and does not require a new Bridge adapter merely because a plugin/theme stores state in `post_meta`. See [Architecture](./docs/ARCHITECTURE.md#discovery-first-provider-architecture).
+Integration is discovery-first: provider-owned public WordPress Abilities are reused at runtime, so a compatible new plugin or theme should normally require no Bridge-specific code. Provider fallbacks are reserved for bounded gaps with documented public APIs. Generic post and term metadata is provider-neutral and does not require a new Bridge adapter merely because a plugin/theme stores state in `post_meta` or `term_meta`. See [Architecture](./docs/ARCHITECTURE.md#discovery-first-provider-architecture).
 
 - **Astra / Astra Pro:** enable Astra's **Abilities** setting. A separate Astra MCP server is not required for this Bridge setup.
 - **Code Snippets:** compatible provider APIs are used for managed snippet lifecycle; the Bridge does not directly evaluate submitted code.
