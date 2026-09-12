@@ -3,7 +3,7 @@
  * Plugin Name: WP Native Builder Bridge
  * Plugin URI: https://github.com/ach1992/wp-native-builder-bridge
  * Description: Connects ChatGPT to WordPress through OAuth, MCP, and permission-checked WordPress Abilities.
- * Version: 0.1.2
+ * Version: 0.2.0
  * Requires at least: 6.9
  * Author: ACh
  * Author URI: https://ach.li
@@ -19,7 +19,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-define( 'WP_NATIVE_BUILDER_BRIDGE_VERSION', '0.1.2' );
+define( 'WP_NATIVE_BUILDER_BRIDGE_VERSION', '0.2.0' );
 define( 'WP_NATIVE_BUILDER_BRIDGE_FILE', __FILE__ );
 define( 'WP_NATIVE_BUILDER_BRIDGE_DIR', __DIR__ );
 
