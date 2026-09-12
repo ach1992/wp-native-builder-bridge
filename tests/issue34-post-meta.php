@@ -99,6 +99,11 @@ if ( ! function_exists( 'has_filter' ) ) {
 		return ! empty( $GLOBALS['wpnb_issue34_auth_filters'][ $hook_name ] );
 	}
 }
+if ( ! function_exists( 'maybe_serialize' ) ) {
+	function maybe_serialize( $data ) {
+		return ( is_array( $data ) || is_object( $data ) ) ? serialize( $data ) : $data;
+	}
+}
 
 wpnb_test_reset_state();
 $GLOBALS['wpnb_test']['post_types']['wpnb_builder_fixture'] = (object) array(
