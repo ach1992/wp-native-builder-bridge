@@ -71,8 +71,11 @@ try {
 		}
 	}
 	sort( $names );
-	wpnb_issue5_assert( 33 === count( $names ), 'Baseline Bridge registry must contain exactly 33 abilities without optional provider fallbacks.' );
-	wpnb_issue5_assert( 33 === count( array_unique( $names ) ), 'Bridge ability names are not unique.' );
+	wpnb_issue5_assert( 36 === count( $names ), 'Baseline Bridge registry must contain exactly 36 abilities without optional provider fallbacks.' );
+	wpnb_issue5_assert( 36 === count( array_unique( $names ) ), 'Bridge ability names are not unique.' );
+	// Issue #36 adds exactly three names; retain the pre-existing 33-ability boundary.
+	$term_metadata_names = array( 'wp-native-builder/term-meta-read', 'wp-native-builder/term-meta-update', 'wp-native-builder/term-meta-delete' );
+	wpnb_issue5_assert( 3 === count( array_intersect( $names, $term_metadata_names ) ) && 33 === count( array_diff( $names, $term_metadata_names ) ), 'Registry changed outside the three Issue #36 term metadata abilities.' );
 
 	$defaults = $settings->defaults();
 	wpnb_issue5_assert( 1 === $defaults[ Settings::GROUP_SITE_READ ], 'Site Read is not the sole enabled default group.' );
