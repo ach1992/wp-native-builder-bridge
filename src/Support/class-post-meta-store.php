@@ -449,6 +449,10 @@ final class Post_Meta_Store {
 	/**
 	 * Performs one fixed-schema byte-exact row update.
 	 *
+	 * Every branch contains a complete literal query template so neither the caller nor
+	 * an internal string fragment can select SQL structure. SQL NULL is represented by
+	 * the two branches that use SET ... NULL or ... IS NULL rather than a text value.
+	 *
 	 * @param int         $meta_id      Physical meta ID.
 	 * @param int         $post_id      Post ID.
 	 * @param string      $key          Exact key.
@@ -459,23 +463,59 @@ final class Post_Meta_Store {
 	private function exact_update_raw_row( $meta_id, $post_id, $key, $expected_raw, $new_raw ) {
 		global $wpdb;
 
-		$set_sql  = null === $new_raw ? 'meta_value = NULL' : 'meta_value = %s';
-		$raw_sql  = null === $expected_raw ? 'meta_value IS NULL' : 'CAST(meta_value AS BINARY) = CAST(%s AS BINARY)';
-		$sql      = "UPDATE %i SET {$set_sql} WHERE meta_id = %d AND post_id = %d AND CAST(meta_key AS BINARY) = CAST(%s AS BINARY) AND {$raw_sql}";
-		$sql_args = array( $wpdb->postmeta );
-		if ( null !== $new_raw ) {
-			$sql_args[] = $new_raw;
-		}
-		$sql_args[] = (int) $meta_id;
-		$sql_args[] = (int) $post_id;
-		$sql_args[] = (string) $key;
-		if ( null !== $expected_raw ) {
-			$sql_args[] = $expected_raw;
+		if ( null === $expected_raw && null === $new_raw ) {
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- Fixed-purpose byte-exact wp_postmeta CAS.
+			return $wpdb->query(
+				$wpdb->prepare(
+					'UPDATE %i SET meta_value = NULL WHERE meta_id = %d AND post_id = %d AND CAST(meta_key AS BINARY) = CAST(%s AS BINARY) AND meta_value IS NULL',
+					$wpdb->postmeta,
+					(int) $meta_id,
+					(int) $post_id,
+					(string) $key
+				)
+			);
 		}
 
-		$prepared_sql = $wpdb->prepare( $sql, $sql_args );
+		if ( null === $expected_raw ) {
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- Fixed-purpose byte-exact wp_postmeta CAS.
+			return $wpdb->query(
+				$wpdb->prepare(
+					'UPDATE %i SET meta_value = %s WHERE meta_id = %d AND post_id = %d AND CAST(meta_key AS BINARY) = CAST(%s AS BINARY) AND meta_value IS NULL',
+					$wpdb->postmeta,
+					$new_raw,
+					(int) $meta_id,
+					(int) $post_id,
+					(string) $key
+				)
+			);
+		}
+
+		if ( null === $new_raw ) {
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- Fixed-purpose byte-exact wp_postmeta CAS.
+			return $wpdb->query(
+				$wpdb->prepare(
+					'UPDATE %i SET meta_value = NULL WHERE meta_id = %d AND post_id = %d AND CAST(meta_key AS BINARY) = CAST(%s AS BINARY) AND CAST(meta_value AS BINARY) = CAST(%s AS BINARY)',
+					$wpdb->postmeta,
+					(int) $meta_id,
+					(int) $post_id,
+					(string) $key,
+					$expected_raw
+				)
+			);
+		}
+
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- Fixed-purpose byte-exact wp_postmeta CAS.
-		return $wpdb->query( $prepared_sql );
+		return $wpdb->query(
+			$wpdb->prepare(
+				'UPDATE %i SET meta_value = %s WHERE meta_id = %d AND post_id = %d AND CAST(meta_key AS BINARY) = CAST(%s AS BINARY) AND CAST(meta_value AS BINARY) = CAST(%s AS BINARY)',
+				$wpdb->postmeta,
+				$new_raw,
+				(int) $meta_id,
+				(int) $post_id,
+				(string) $key,
+				$expected_raw
+			)
+		);
 	}
 
 	/**
@@ -490,21 +530,30 @@ final class Post_Meta_Store {
 	private function exact_delete_raw_row( $meta_id, $post_id, $key, $expected_raw ) {
 		global $wpdb;
 
-		$raw_sql  = null === $expected_raw ? 'meta_value IS NULL' : 'CAST(meta_value AS BINARY) = CAST(%s AS BINARY)';
-		$sql      = "DELETE FROM %i WHERE meta_id = %d AND post_id = %d AND CAST(meta_key AS BINARY) = CAST(%s AS BINARY) AND {$raw_sql}";
-		$sql_args = array(
-			$wpdb->postmeta,
-			(int) $meta_id,
-			(int) $post_id,
-			(string) $key,
-		);
-		if ( null !== $expected_raw ) {
-			$sql_args[] = $expected_raw;
+		if ( null === $expected_raw ) {
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- Fixed-purpose byte-exact wp_postmeta CAS.
+			return $wpdb->query(
+				$wpdb->prepare(
+					'DELETE FROM %i WHERE meta_id = %d AND post_id = %d AND CAST(meta_key AS BINARY) = CAST(%s AS BINARY) AND meta_value IS NULL',
+					$wpdb->postmeta,
+					(int) $meta_id,
+					(int) $post_id,
+					(string) $key
+				)
+			);
 		}
 
-		$prepared_sql = $wpdb->prepare( $sql, $sql_args );
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- Fixed-purpose byte-exact wp_postmeta CAS.
-		return $wpdb->query( $prepared_sql );
+		return $wpdb->query(
+			$wpdb->prepare(
+				'DELETE FROM %i WHERE meta_id = %d AND post_id = %d AND CAST(meta_key AS BINARY) = CAST(%s AS BINARY) AND CAST(meta_value AS BINARY) = CAST(%s AS BINARY)',
+				$wpdb->postmeta,
+				(int) $meta_id,
+				(int) $post_id,
+				(string) $key,
+				$expected_raw
+			)
+		);
 	}
 
 	/** @return bool */
