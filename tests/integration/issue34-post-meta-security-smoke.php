@@ -37,7 +37,7 @@ try {
 	$literal_update = $update->execute( array( 'post_id' => $post_id, 'key' => $literal, 'value_json' => wp_json_encode( 'new' ), 'expected_state_hash' => $literal_read['items'][0]['state_hash'] ) );
 	$ok( ! is_wp_error( $literal_update ) && 'new' === get_post_meta( $post_id, $literal, true ), 'Literal-backslash key identity regressed.' );
 	$secrets = array( 'sessionToken', 'session_token', 'session-token', 'session.token', 'SESSION__TOKEN', 'session\\token', 'idToken', 'id_token', 'idtoken', 'jwtToken', 'jwt_token', 'jwttoken', 'clientSecret', 'accessToken' );
-	foreach ( $secrets as $key ) { add_post_meta( $post_id, wp_slash( $key ), 'secret', true ); $result = $read->execute( array( 'post_id' => $post_id, 'key' => $key, 'include_values' => true ) ); $ok( is_wp_error( $result ) && 'sensitive_post_meta_key' === $result->get_error_code(), 'Sensitive key was readable: ' . $key ); }
+	foreach ( $secrets as $key ) { add_post_meta( $post_id, wp_slash( $key ), 'secret', true ); $input = array( 'post_id' => $post_id, 'key' => $key, 'include_values' => true ); $ok( false === $read->check_permissions( $input ), 'Sensitive key passed the permission gate: ' . $key ); $result = $read->execute( $input ); $ok( is_wp_error( $result ) && 'ability_invalid_permissions' === $result->get_error_code(), 'Sensitive key execution was not denied: ' . $key ); }
 	$design_token = 'design_token'; add_post_meta( $post_id, $design_token, 'blue', true ); $ok( ! is_wp_error( $read->execute( array( 'post_id' => $post_id, 'key' => $design_token ) ) ), 'Unrelated design_token was overblocked.' );
 
 	/* F-002: revisions canonicalize to parent before subtype metadata authorization. */

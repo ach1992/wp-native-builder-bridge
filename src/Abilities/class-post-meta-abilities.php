@@ -271,6 +271,9 @@ final class Post_Meta_Abilities {
 			if ( is_wp_error( $value_error ) ) {
 				return $this->logged_error( $value_error, $post->ID, 'wp-native-builder/post-meta-update' );
 			}
+			if ( empty( $rows[0]['value'] ) ) {
+				return $this->logged_error( new WP_Error( 'post_meta_atomic_mutation_unsupported', __( 'WordPress cannot condition this metadata value atomically. The generic Bridge refuses the mutation to avoid a stale write.', 'wp-native-builder-bridge' ) ), $post->ID, 'wp-native-builder/post-meta-update' );
+			}
 		}
 
 		$current_hash = $this->state_hash( $rows );
@@ -380,6 +383,10 @@ final class Post_Meta_Abilities {
 		if ( is_wp_error( $value_error ) ) {
 			return $this->logged_error( $value_error, $post->ID, 'wp-native-builder/post-meta-delete' );
 		}
+		if ( '' === $rows[0]['value'] || null === $rows[0]['value'] || false === $rows[0]['value'] ) {
+			return $this->logged_error( new WP_Error( 'post_meta_atomic_mutation_unsupported', __( 'WordPress cannot condition this metadata value atomically. The generic Bridge refuses the mutation to avoid a stale write.', 'wp-native-builder-bridge' ) ), $post->ID, 'wp-native-builder/post-meta-delete' );
+		}
+
 		$result = $this->store->delete_row( $post->ID, $key, $rows[0] );
 		if ( is_wp_error( $result ) ) {
 			return $this->logged_error( $result, $post->ID, 'wp-native-builder/post-meta-delete' );
@@ -390,9 +397,6 @@ final class Post_Meta_Abilities {
 			return $this->logged_error( $after, $post->ID, 'wp-native-builder/post-meta-delete' );
 		}
 		if ( ! empty( $after ) ) {
-			if ( ! $this->store->restore_deleted_row( $rows[0] ) ) {
-				return $this->logged_error( $this->compensation_error(), $post->ID, 'wp-native-builder/post-meta-delete' );
-			}
 			return $this->logged_error( $this->stale_error( 'delete' ), $post->ID, 'wp-native-builder/post-meta-delete' );
 		}
 
@@ -830,10 +834,24 @@ final class Post_Meta_Abilities {
 		return array(
 			'type'                 => 'object',
 			'properties'           => array(
-				'post_id'             => array( 'type' => 'integer', 'minimum' => 1 ),
-				'key'                 => array( 'type' => 'string', 'minLength' => 1, 'maxLength' => 255 ),
-				'value_json'          => array( 'type' => 'string', 'minLength' => 1 ),
-				'expected_state_hash' => array( 'type' => 'string', 'minLength' => 64, 'maxLength' => 64 ),
+				'post_id'             => array(
+					'type'    => 'integer',
+					'minimum' => 1,
+				),
+				'key'                 => array(
+					'type'      => 'string',
+					'minLength' => 1,
+					'maxLength' => 255,
+				),
+				'value_json'          => array(
+					'type'      => 'string',
+					'minLength' => 1,
+				),
+				'expected_state_hash' => array(
+					'type'      => 'string',
+					'minLength' => 64,
+					'maxLength' => 64,
+				),
 			),
 			'required'             => array( 'post_id', 'key', 'value_json', 'expected_state_hash' ),
 			'additionalProperties' => false,
@@ -845,9 +863,20 @@ final class Post_Meta_Abilities {
 		return array(
 			'type'                 => 'object',
 			'properties'           => array(
-				'post_id'             => array( 'type' => 'integer', 'minimum' => 1 ),
-				'key'                 => array( 'type' => 'string', 'minLength' => 1, 'maxLength' => 255 ),
-				'expected_state_hash' => array( 'type' => 'string', 'minLength' => 64, 'maxLength' => 64 ),
+				'post_id'             => array(
+					'type'    => 'integer',
+					'minimum' => 1,
+				),
+				'key'                 => array(
+					'type'      => 'string',
+					'minLength' => 1,
+					'maxLength' => 255,
+				),
+				'expected_state_hash' => array(
+					'type'      => 'string',
+					'minLength' => 64,
+					'maxLength' => 64,
+				),
 			),
 			'required'             => array( 'post_id', 'key', 'expected_state_hash' ),
 			'additionalProperties' => false,
@@ -861,7 +890,10 @@ final class Post_Meta_Abilities {
 			'properties'           => array(
 				'post_id'   => array( 'type' => 'integer' ),
 				'post_type' => array( 'type' => 'string' ),
-				'items'     => array( 'type' => 'array', 'items' => $this->item_schema() ),
+				'items'     => array(
+					'type'  => 'array',
+					'items' => $this->item_schema(),
+				),
 			),
 			'required'             => array( 'post_id', 'post_type', 'items' ),
 			'additionalProperties' => false,
@@ -891,7 +923,10 @@ final class Post_Meta_Abilities {
 				'key'         => array( 'type' => 'string' ),
 				'count'       => array( 'type' => 'integer' ),
 				'state_hash'  => array( 'type' => 'string' ),
-				'value_types' => array( 'type' => 'array', 'items' => array( 'type' => 'string' ) ),
+				'value_types' => array(
+					'type'  => 'array',
+					'items' => array( 'type' => 'string' ),
+				),
 				'values'      => array(
 					'type'  => 'array',
 					'items' => array(
