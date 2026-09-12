@@ -110,10 +110,9 @@ $GLOBALS['wpnb_test']['post_types']['wpnb_builder_fixture'] = (object) array(
 	'name'               => 'wpnb_builder_fixture',
 	'public'             => false,
 	'publicly_queryable' => false,
-	'show_in_rest'       => true,
+	'show_in_rest'       => false,
 	'cap'                => (object) array( 'edit_posts' => 'edit_posts' ),
 );
-$GLOBALS['wpnb_test']['post_type_supports']['wpnb_builder_fixture']['editor'] = true;
 $GLOBALS['wpnb_test']['capabilities']['read']             = true;
 $GLOBALS['wpnb_test']['capabilities']['edit_post']        = true;
 $GLOBALS['wpnb_test']['capabilities']['edit_post_meta']   = true;
@@ -140,7 +139,7 @@ update_option( Settings::OPTION_NAME, $access, false );
 
 wpnb_issue34_assert(
 	$abilities->can_read( array( 'post_id' => 101, 'key' => '_builder_markup' ) ),
-	'Protected unregistered builder metadata stayed blocked after Advanced Metadata was enabled.'
+	'Private non-REST CPT metadata stayed blocked after Advanced Metadata was enabled.'
 );
 
 $listed = $abilities->read( array( 'post_id' => 101 ) );
