@@ -43,7 +43,7 @@ final class Post_Meta_Abilities {
 			'wp-native-builder/post-meta-read',
 			array(
 				'label'               => __( 'Read Post Metadata', 'wp-native-builder-bridge' ),
-				'description'         => __( 'Lists metadata keys or reads one exact metadata key for an eligible WordPress content object when Advanced Metadata access is enabled.', 'wp-native-builder-bridge' ),
+				'description'         => __( 'Lists metadata keys or reads one exact metadata key for a WordPress post object when Advanced Metadata access is enabled.', 'wp-native-builder-bridge' ),
 				'category'            => Registrar::CATEGORY,
 				'input_schema'        => $this->read_input_schema(),
 				'output_schema'       => $this->read_output_schema(),
@@ -63,7 +63,7 @@ final class Post_Meta_Abilities {
 				'output_schema'       => $this->item_schema(),
 				'execute_callback'    => array( $this, 'update' ),
 				'permission_callback' => array( $this, 'can_update' ),
-				'meta'                => $this->meta( false, false, true ),
+				'meta'                => $this->meta( false, false, false ),
 			)
 		);
 
@@ -330,7 +330,7 @@ final class Post_Meta_Abilities {
 	}
 
 	/**
-	 * Returns a post only when it is eligible generic content the user may edit.
+	 * Returns a post only when it is outside Bridge-private storage and the user may edit it.
 	 *
 	 * @param int $post_id Post ID.
 	 * @return object|null
@@ -339,10 +339,12 @@ final class Post_Meta_Abilities {
 		if ( $post_id < 1 ) {
 			return null;
 		}
+
 		$post = get_post( $post_id );
-		if ( ! $post || ! Content_Eligibility::post_type_object( $post->post_type ) || ! current_user_can( 'edit_post', $post->ID ) ) {
+		if ( ! $post || in_array( $post->post_type, array( 'wpnb_doc', 'wpnb_task' ), true ) || ! current_user_can( 'edit_post', $post->ID ) ) {
 			return null;
 		}
+
 		return $post;
 	}
 
@@ -358,7 +360,7 @@ final class Post_Meta_Abilities {
 		}
 		$post = $this->authorized_post( is_array( $input ) && isset( $input['post_id'] ) ? (int) $input['post_id'] : 0 );
 		if ( ! $post ) {
-			return new WP_Error( 'post_meta_target_not_allowed', __( 'The requested post does not exist, is not eligible generic content, or cannot be edited by the current WordPress user.', 'wp-native-builder-bridge' ) );
+			return new WP_Error( 'post_meta_target_not_allowed', __( 'The requested post does not exist, belongs to Bridge-private Workspace storage, or cannot be edited by the current WordPress user.', 'wp-native-builder-bridge' ) );
 		}
 		return $post;
 	}
