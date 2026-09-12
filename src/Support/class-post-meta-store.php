@@ -174,16 +174,23 @@ final class Post_Meta_Store {
 	/**
 	 * Replaces one exact physical row with byte-exact compare-and-swap semantics.
 	 *
+	 * Verification and any compensation stay inside this persistence boundary so a
+	 * later unrelated write after the verified linearization point is simply a new state.
+	 *
 	 * @param int                 $post_id  Post ID.
 	 * @param string              $key      Exact unslashed key.
 	 * @param array<string,mixed> $row      Previously inspected physical row.
 	 * @param array<string,mixed> $prepared Sanitized value and exact raw storage representation.
-	 * @return array{value:mixed,raw_value:string|null}|WP_Error
+	 * @return array<string,mixed>|WP_Error Verified physical row after the update.
 	 */
 	public function replace_row( $post_id, $key, array $row, array $prepared ) {
 		if ( $this->is_test_mode() ) {
 			$result = update_post_meta( (int) $post_id, (string) $key, $prepared['value'], $row['value'] );
-			return false === $result ? new WP_Error( 'post_meta_update_failed', __( 'WordPress could not update the requested metadata key.', 'wp-native-builder-bridge' ) ) : $prepared;
+			if ( false === $result ) {
+				return new WP_Error( 'post_meta_update_failed', __( 'WordPress could not update the requested metadata key.', 'wp-native-builder-bridge' ) );
+			}
+			$after = $this->rows( $post_id, $key );
+			return isset( $after[0] ) ? $after[0] : new WP_Error( 'post_meta_update_failed', __( 'WordPress could not update the requested metadata key.', 'wp-native-builder-bridge' ) );
 		}
 
 		$current = $this->rows( $post_id, $key );
@@ -216,11 +223,30 @@ final class Post_Meta_Store {
 		wp_cache_delete( (int) $post_id, 'post_meta' );
 		do_action( 'updated_post_meta', $meta_id, (int) $post_id, (string) $key, $prepared['value'] );
 		do_action( 'updated_postmeta', $meta_id, (int) $post_id, (string) $key, $prepared['raw_value'] );
-		return $prepared;
+
+		$after = $this->rows( $post_id, $key );
+		if ( is_wp_error( $after ) ) {
+			if ( ! $this->restore_updated_row( $row, $prepared['raw_value'] ) ) {
+				return new WP_Error( 'post_meta_compensation_failed', __( 'Concurrent metadata changed during mutation and the Bridge could not restore its exact physical row safely.', 'wp-native-builder-bridge' ) );
+			}
+			return $after;
+		}
+		$expected_row              = $row;
+		$expected_row['raw_value'] = $prepared['raw_value'];
+		if ( 1 !== count( $after ) || ! $this->row_matches( $after[0], $expected_row ) ) {
+			if ( ! $this->restore_updated_row( $row, $prepared['raw_value'] ) ) {
+				return new WP_Error( 'post_meta_compensation_failed', __( 'Concurrent metadata changed during mutation and the Bridge could not restore its exact physical row safely.', 'wp-native-builder-bridge' ) );
+			}
+			return new WP_Error( 'stale_post_meta_conflict', __( 'Post metadata changed after it was read. Refresh the metadata state before updating it.', 'wp-native-builder-bridge' ) );
+		}
+
+		return $after[0];
 	}
 
 	/**
 	 * Deletes one exact physical row with byte-exact compare-and-swap semantics.
+	 *
+	 * Verification and restoration stay inside the same persistence boundary.
 	 *
 	 * @param int                 $post_id Post ID.
 	 * @param string              $key     Exact unslashed key.
