@@ -29,6 +29,21 @@ if grep -R -nE "['\"](server_path|file_path|package_url|shell_command|sql_query|
     exit 1
 fi
 
+# Issue #34 deliberately adds generic post_meta access, not a generic WordPress data-store
+# backdoor. Keep options/user-meta APIs out of that provider so future edits cannot silently
+# expand its authority without an explicit architectural change.
+metadata_provider='src/Abilities/class-post-meta-abilities.php'
+if [[ -f "$metadata_provider" ]]; then
+    if grep -nE '(^|[^[:alnum:]_])(get|add|update|delete)_option[[:space:]]*\(' "$metadata_provider"; then
+        echo "ERROR: Advanced Metadata provider must not expose generic WordPress options." >&2
+        exit 1
+    fi
+    if grep -nE '(^|[^[:alnum:]_])(get|add|update|delete)_user_meta[[:space:]]*\(' "$metadata_provider"; then
+        echo "ERROR: Advanced Metadata provider must not expose generic user metadata." >&2
+        exit 1
+    fi
+fi
+
 # The consent form posts to the same WordPress origin, then redirects to ChatGPT's
 # fixed OAuth callback. Chromium applies form-action across that redirect chain,
 # so the callback origin must remain explicitly allowed without broadening the CSP.
