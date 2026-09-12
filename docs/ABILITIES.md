@@ -16,6 +16,9 @@ The baseline installation registers the core Bridge surfaces below. Optional Gra
 | `revision-restore` | Builder Write | Restore a revision with stale-state checks. |
 | `blocks-read` | Site Read | Parse Gutenberg blocks for eligible content. |
 | `blocks-mutate` | Builder Write | Targeted Gutenberg append/insert/replace/remove with stale-state protection. |
+| `post-meta-read` | Advanced Metadata | Discover post-meta keys or read one exact key for eligible content. Values are returned only for an explicitly named key. |
+| `post-meta-update` | Advanced Metadata | Create/replace one single-value post-meta key with stale-state protection. Ambiguous multi-row keys fail closed. |
+| `post-meta-delete` | Advanced Metadata + Users & Destructive | Delete one single-value post-meta key with stale-state protection. |
 | `media-read` | Site Read | Read Media Library attachments. |
 | `media-upload` | Builder Write | Upload bounded file bytes through WordPress Media APIs. |
 | `media-update` | Builder Write | Update bounded attachment metadata/parent. |
@@ -36,6 +39,14 @@ The baseline installation registers the core Bridge surfaces below. Optional Gra
 | `workspace-resume` | Site Read | Return compact durable Workspace orientation. |
 | `workspace-document` | Site Read / Builder Write | List/read/create/update/archive private Workspace documents. |
 | `workspace-task` | Site Read / Builder Write | List/read/create/update/transition/archive private Workspace tasks. |
+
+## Advanced Metadata boundary
+
+`Advanced Metadata` is disabled by default and must be enabled by a WordPress administrator from **WP Native Builder → Settings**. It is intentionally provider-neutral: the Bridge does not maintain an Astra/plugin/theme meta-key allowlist.
+
+For eligible content objects, protected/private keys (including keys beginning with `_`) can be reached when the connected WordPress user may edit the target post. When Core or a provider explicitly registers a key or installs a post-meta authorization filter, that explicit authorization contract remains authoritative.
+
+The generic metadata surface deliberately does not expose arbitrary WordPress options, user meta, Bridge Workspace internals, or credential-like metadata keys. Updates and deletes require the exact `state_hash` returned by `post-meta-read`; generic mutation refuses ambiguous multi-row keys and PHP-object values rather than guessing or performing lossy conversion.
 
 ## Optional Code Snippets fallback
 
