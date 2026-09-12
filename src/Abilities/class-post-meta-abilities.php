@@ -301,28 +301,13 @@ final class Post_Meta_Abilities {
 			return $this->item_from_rows( $key, $rows, true );
 		}
 
-		$result = $this->store->replace_row( $post->ID, $key, $rows[0], $prepared_value );
-		if ( is_wp_error( $result ) ) {
-			return $this->logged_error( $result, $post->ID, 'wp-native-builder/post-meta-update' );
-		}
-
-		$after = $this->store->rows( $post->ID, $key );
-		if ( is_wp_error( $after ) ) {
-			return $this->logged_error( $after, $post->ID, 'wp-native-builder/post-meta-update' );
-		}
-		if (
-			1 !== count( $after )
-			|| (int) $after[0]['meta_id'] !== (int) $rows[0]['meta_id']
-			|| $after[0]['raw_value'] !== $result['raw_value']
-		) {
-			if ( ! $this->store->restore_updated_row( $rows[0], $result['raw_value'] ) ) {
-				return $this->logged_error( $this->compensation_error(), $post->ID, 'wp-native-builder/post-meta-update' );
-			}
-			return $this->logged_error( $this->stale_error( 'update' ), $post->ID, 'wp-native-builder/post-meta-update' );
+		$verified_row = $this->store->replace_row( $post->ID, $key, $rows[0], $prepared_value );
+		if ( is_wp_error( $verified_row ) ) {
+			return $this->logged_error( $verified_row, $post->ID, 'wp-native-builder/post-meta-update' );
 		}
 
 		$this->log->record( 'wp-native-builder/post-meta-update', 'post_meta', (int) $post->ID, true, '' );
-		return $this->item_from_rows( $key, $after, true );
+		return $this->item_from_rows( $key, array( $verified_row ), true );
 	}
 
 	/**
@@ -384,14 +369,6 @@ final class Post_Meta_Abilities {
 		$result = $this->store->delete_row( $post->ID, $key, $rows[0] );
 		if ( is_wp_error( $result ) ) {
 			return $this->logged_error( $result, $post->ID, 'wp-native-builder/post-meta-delete' );
-		}
-
-		$after = $this->store->rows( $post->ID, $key );
-		if ( is_wp_error( $after ) ) {
-			return $this->logged_error( $after, $post->ID, 'wp-native-builder/post-meta-delete' );
-		}
-		if ( ! empty( $after ) ) {
-			return $this->logged_error( $this->stale_error( 'delete' ), $post->ID, 'wp-native-builder/post-meta-delete' );
 		}
 
 		$this->log->record( 'wp-native-builder/post-meta-delete', 'post_meta', (int) $post->ID, true, '' );
@@ -688,11 +665,6 @@ final class Post_Meta_Abilities {
 			? __( 'Post metadata changed after it was read. Refresh the metadata state before deleting it.', 'wp-native-builder-bridge' )
 			: __( 'Post metadata changed after it was read. Refresh the metadata state before updating it.', 'wp-native-builder-bridge' );
 		return new WP_Error( 'stale_post_meta_conflict', $message );
-	}
-
-	/** @return WP_Error */
-	private function compensation_error() {
-		return new WP_Error( 'post_meta_compensation_failed', __( 'Concurrent metadata changed during mutation and the Bridge could not restore its exact physical row safely.', 'wp-native-builder-bridge' ) );
 	}
 
 	/**
