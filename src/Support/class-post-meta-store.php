@@ -51,21 +51,24 @@ final class Post_Meta_Store {
 
 		$rows = array();
 		foreach ( $metadata as $meta ) {
-			if ( ! is_object( $meta ) || ! isset( $meta->meta_id, $meta->post_id, $meta->meta_key ) ) {
+			if ( is_object( $meta ) ) {
+				$meta = get_object_vars( $meta );
+			}
+			if ( ! is_array( $meta ) || ! isset( $meta['meta_id'], $meta['post_id'], $meta['meta_key'] ) ) {
 				continue;
 			}
-			$meta_key = (string) $meta->meta_key;
+			$meta_key = (string) $meta['meta_key'];
 			if ( null !== $key && $meta_key !== (string) $key ) {
 				continue;
 			}
-			$raw_value = isset( $meta->meta_value ) ? $meta->meta_value : '';
+			$raw_value = isset( $meta['meta_value'] ) ? $meta['meta_value'] : '';
 			if ( ! is_scalar( $raw_value ) && null !== $raw_value ) {
 				return new WP_Error( 'post_meta_physical_state_unavailable', __( 'Physical post metadata state could not be established safely.', 'wp-native-builder-bridge' ) );
 			}
 			$raw_value = null === $raw_value ? '' : (string) $raw_value;
 			$rows[]    = array(
-				'meta_id'   => (int) $meta->meta_id,
-				'post_id'   => (int) $meta->post_id,
+				'meta_id'   => (int) $meta['meta_id'],
+				'post_id'   => (int) $meta['post_id'],
 				'key'       => $meta_key,
 				'raw_value' => $raw_value,
 				'value'     => maybe_unserialize( $raw_value ),
@@ -144,7 +147,6 @@ final class Post_Meta_Store {
 		do_action( 'update_post_meta', $meta_id, (int) $post_id, (string) $key, $prepared['value'] );
 		do_action( 'update_postmeta', $meta_id, (int) $post_id, (string) $key, $prepared['raw_value'] );
 
-		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery -- Fixed-row CAS; caller cannot select SQL/table/columns.
 		$result = $wpdb->update(
 			$wpdb->postmeta,
 			array( 'meta_value' => $prepared['raw_value'] ),
@@ -201,7 +203,6 @@ final class Post_Meta_Store {
 		do_action( 'delete_post_meta', $meta_ids, (int) $post_id, (string) $key, $row['value'] );
 		do_action( 'delete_postmeta', $meta_ids );
 
-		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery -- Fixed-row CAS; caller cannot select SQL/table/columns.
 		$result = $wpdb->delete(
 			$wpdb->postmeta,
 			array(
@@ -235,7 +236,6 @@ final class Post_Meta_Store {
 		}
 
 		global $wpdb;
-		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery -- Row-scoped compensation/cleanup only.
 		$result = $wpdb->insert(
 			$wpdb->postmeta,
 			array(
@@ -263,7 +263,6 @@ final class Post_Meta_Store {
 		}
 
 		global $wpdb;
-		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery -- Fixed-row CAS; caller cannot select SQL/table/columns.
 		$result = $wpdb->update(
 			$wpdb->postmeta,
 			array( 'meta_value' => (string) $row['raw_value'] ),
@@ -292,7 +291,6 @@ final class Post_Meta_Store {
 		}
 
 		global $wpdb;
-		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery -- Fixed-row CAS; caller cannot select SQL/table/columns.
 		$result = $wpdb->delete(
 			$wpdb->postmeta,
 			array(
