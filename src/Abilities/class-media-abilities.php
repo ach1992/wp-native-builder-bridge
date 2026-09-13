@@ -624,10 +624,15 @@ final class Media_Abilities {
 	 * @return bool
 	 */
 	public function can_import_url( $input ) {
-		return is_array( $input )
-			&& ( ! isset( $input['post_id'] ) || ( is_int( $input['post_id'] ) && $input['post_id'] >= 0 ) )
-			&& $this->permissions->allowed( Settings::GROUP_REMOTE_MEDIA, 'upload_files' )
-			&& $this->can_upload( $input );
+		try {
+			return is_array( $input )
+				&& ( ! isset( $input['post_id'] ) || ( is_int( $input['post_id'] ) && $input['post_id'] >= 0 ) )
+				&& $this->permissions->allowed( Settings::GROUP_REMOTE_MEDIA, 'upload_files' )
+				&& $this->can_upload( $input );
+		} catch ( \Throwable $error ) {
+			// Permission callbacks also run outside the import execution boundary.
+			return false;
+		}
 	}
 
 	/**
@@ -637,6 +642,111 @@ final class Media_Abilities {
 	 * @return array<string,mixed>|WP_Error Attachment summary or a redacted error.
 	 */
 	public function import_url( $input ) {
+		$state      = array(
+			'temp_file'        => '',
+			'destination_file' => '',
+			'sideload_started' => false,
+			'insert_started'   => false,
+			'attachment_id'    => 0,
+		);
+		$unexpected = false;
+		$result     = null;
+		try {
+			$result = $this->import_url_checked( $input, $state );
+		} catch ( \Throwable $error ) {
+			// Never pass exception messages, traces or data to the MCP Adapter.
+			$unexpected = true;
+		}
+		try {
+			$cleaned = $this->cleanup_remote_import( $state );
+		} catch ( \Throwable $error ) {
+			$cleaned = false;
+		}
+		if ( $unexpected || ! $cleaned ) {
+			return $this->import_recovery_error( $state, $cleaned );
+		}
+		if ( ! is_wp_error( $result ) ) {
+			try {
+				$this->log->record( 'wp-native-builder/media-import-url', 'attachment', $state['attachment_id'], true, '' );
+			} catch ( \Throwable $error ) {
+				return $this->import_recovery_error( $state, $cleaned );
+			}
+		}
+		return $result;
+	}
+
+	/**
+	 * Cleans known invocation-owned files without deleting committed media.
+	 *
+	 * @param array<string,mixed> $state Current import progress.
+	 * @return bool Whether all known cleanup candidates were removed.
+	 */
+	private function cleanup_remote_import( $state ) {
+		$paths = array( $state['temp_file'] );
+		// A native insert can commit before throwing and returning its ID.
+		if ( ! $state['insert_started'] && ! $state['attachment_id'] ) {
+			$paths[] = $state['destination_file'];
+		}
+		$cleaned = true;
+		foreach ( array_unique( array_filter( $paths ) ) as $path ) {
+			try {
+				clearstatcache( true, $path );
+				if ( is_file( $path ) ) {
+					wp_delete_file( $path );
+					clearstatcache( true, $path );
+					if ( is_file( $path ) ) {
+						$cleaned = false;
+					}
+				}
+			} catch ( \Throwable $error ) {
+				$cleaned = false;
+			}
+		}
+		return $cleaned;
+	}
+
+	/**
+	 * Returns bounded recovery information even when translation or audit fails.
+	 *
+	 * @param array<string,mixed> $state   Current import progress.
+	 * @param bool                $cleaned Known cleanup completion.
+	 * @return WP_Error A fixed privacy-safe error, never a provider diagnostic.
+	 */
+	private function import_recovery_error( $state, $cleaned ) {
+		$id      = (int) $state['attachment_id'];
+		$message = 'The media import could not finish safely. Inspect the Media Library and upload storage before retrying.';
+		try {
+			if ( $id > 0 ) {
+				/* translators: %d: ID of an already-created Media Library attachment. */
+				$message = sprintf( __( 'The media import stopped after creating attachment %d. Inspect that Media Library item before retrying.', 'wp-native-builder-bridge' ), $id );
+			} elseif ( ! $state['sideload_started'] && $cleaned ) {
+				$message = __( 'The media import stopped before attachment creation. Known temporary files were cleaned up.', 'wp-native-builder-bridge' );
+			} else {
+				$message = __( 'The media import could not finish safely. Inspect the Media Library and upload storage before retrying.', 'wp-native-builder-bridge' );
+			}
+			$this->log->record( 'wp-native-builder/media-import-url', 'attachment', $id, false, 'media_import_recovery_required' );
+		} catch ( \Throwable $error ) {
+			// Recovery reporting must not create another diagnostic disclosure.
+		}
+		return new WP_Error(
+			'media_import_recovery_required',
+			$message,
+			array(
+				'attachment_id'          => $id,
+				'attachment_state'       => $id > 0 ? 'created' : ( $state['sideload_started'] ? 'unconfirmed' : 'not_created' ),
+				'known_cleanup_complete' => $cleaned,
+			)
+		);
+	}
+
+	/**
+	 * Runs the native import lifecycle inside the public exception boundary.
+	 *
+	 * @param array<string,mixed> $input Validated Ability input.
+	 * @param array<string,mixed> $state Invocation-owned cleanup and commit state.
+	 * @return array<string,mixed>|WP_Error Attachment summary or redacted failure.
+	 */
+	private function import_url_checked( $input, &$state ) {
 		$ability = 'wp-native-builder/media-import-url';
 		if ( ! $this->can_import_url( $input ) ) {
 			return $this->logged_error( $ability, 'media_import_permission_denied', __( 'Remote Media, Builder Write, and the required WordPress upload authority must be enabled.', 'wp-native-builder-bridge' ) );
@@ -661,57 +771,55 @@ final class Media_Abilities {
 			return $this->logged_error( $ability, 'media_import_limit_unavailable', __( 'WordPress must provide a finite positive upload limit before remote media can be imported.', 'wp-native-builder-bridge' ) );
 		}
 		$this->load_media_dependencies();
-		$temp_file = wp_tempnam( $filename );
+		$temp_file          = wp_tempnam( $filename );
+		$state['temp_file'] = $temp_file;
 		if ( ! $temp_file ) {
 			return $this->logged_error( $ability, 'media_temp_failed', __( 'WordPress could not allocate a temporary upload file.', 'wp-native-builder-bridge' ) );
 		}
-		try {
-			$response = wp_safe_remote_get(
-				$input['url'],
-				array(
-					'timeout'             => 30,
-					'redirection'         => 5,
-					'sslverify'           => true,
-					'stream'              => true,
-					'filename'            => $temp_file,
-					'limit_response_size' => $max_bytes + 1,
-					'decompress'          => false,
-					'headers'             => array( 'Accept-Encoding' => 'identity' ),
-					'cookies'             => array(),
-				)
-			);
-			// HTTP/provider errors can contain signed URLs, paths, or response bodies.
-			if ( is_wp_error( $response ) || 200 !== (int) wp_remote_retrieve_response_code( $response ) ) {
-				return $this->logged_error( $ability, 'media_import_http_failed', __( 'WordPress could not download a complete media response.', 'wp-native-builder-bridge' ) );
-			}
-			clearstatcache( true, $temp_file );
-			$bytes  = is_file( $temp_file ) ? filesize( $temp_file ) : false;
-			$length = wp_remote_retrieve_header( $response, 'content-length' );
-			if ( false === $bytes || $bytes < 1 || $bytes > $max_bytes ) {
-				return $this->logged_error( $ability, 'media_import_size_invalid', __( 'The downloaded media is empty or exceeds the WordPress upload limit.', 'wp-native-builder-bridge' ) );
-			}
-			if ( '' !== $length && ( ! is_scalar( $length ) || ! ctype_digit( (string) $length ) || ltrim( (string) $length, '0' ) !== (string) $bytes ) ) {
-				return $this->logged_error( $ability, 'media_import_incomplete', __( 'The downloaded media length does not match the complete response.', 'wp-native-builder-bridge' ) );
-			}
-			$type = wp_check_filetype_and_ext( $temp_file, $filename, get_allowed_mime_types() );
-			if ( empty( $type['ext'] ) || empty( $type['type'] ) ) {
+		if ( ! $this->can_import_url( $input ) ) {
+			return $this->logged_error( $ability, 'media_import_permission_denied', __( 'Remote Media, Builder Write, and the required WordPress upload authority must be enabled.', 'wp-native-builder-bridge' ) );
+		}
+		$response = wp_safe_remote_get(
+			$input['url'],
+			array(
+				'timeout'             => 30,
+				'redirection'         => 5,
+				'sslverify'           => true,
+				'stream'              => true,
+				'filename'            => $temp_file,
+				'limit_response_size' => $max_bytes + 1,
+				'decompress'          => false,
+				'headers'             => array( 'Accept-Encoding' => 'identity' ),
+				'cookies'             => array(),
+			)
+		);
+		// HTTP/provider errors can contain signed URLs, paths, or response bodies.
+		if ( is_wp_error( $response ) || 200 !== (int) wp_remote_retrieve_response_code( $response ) ) {
+			return $this->logged_error( $ability, 'media_import_http_failed', __( 'WordPress could not download a complete media response.', 'wp-native-builder-bridge' ) );
+		}
+		clearstatcache( true, $temp_file );
+		$bytes  = is_file( $temp_file ) ? filesize( $temp_file ) : false;
+		$length = wp_remote_retrieve_header( $response, 'content-length' );
+		if ( false === $bytes || $bytes < 1 || $bytes > $max_bytes ) {
+			return $this->logged_error( $ability, 'media_import_size_invalid', __( 'The downloaded media is empty or exceeds the WordPress upload limit.', 'wp-native-builder-bridge' ) );
+		}
+		if ( '' !== $length && ( ! is_scalar( $length ) || ! ctype_digit( (string) $length ) || ltrim( (string) $length, '0' ) !== (string) $bytes ) ) {
+			return $this->logged_error( $ability, 'media_import_incomplete', __( 'The downloaded media length does not match the complete response.', 'wp-native-builder-bridge' ) );
+		}
+		$type = wp_check_filetype_and_ext( $temp_file, $filename, get_allowed_mime_types() );
+		if ( empty( $type['ext'] ) || empty( $type['type'] ) ) {
+			return $this->logged_error( $ability, 'media_import_type_denied', __( 'WordPress did not accept the downloaded file type.', 'wp-native-builder-bridge' ) );
+		}
+		if ( ! empty( $type['proper_filename'] ) ) {
+			$filename = sanitize_file_name( $type['proper_filename'] );
+			if ( preg_match( '/(^|\.)(php[0-9]*|phtml|pht|phar|cgi)(\.|$)/i', $filename ) ) {
 				return $this->logged_error( $ability, 'media_import_type_denied', __( 'WordPress did not accept the downloaded file type.', 'wp-native-builder-bridge' ) );
 			}
-			if ( ! empty( $type['proper_filename'] ) ) {
-				$filename = sanitize_file_name( $type['proper_filename'] );
-				if ( preg_match( '/(^|\.)(php[0-9]*|phtml|pht|phar|cgi)(\.|$)/i', $filename ) ) {
-					return $this->logged_error( $ability, 'media_import_type_denied', __( 'WordPress did not accept the downloaded file type.', 'wp-native-builder-bridge' ) );
-				}
-			}
-			if ( ! $this->can_import_url( $input ) ) {
-				return $this->logged_error( $ability, 'media_import_permission_denied', __( 'Remote Media, Builder Write, and the required WordPress upload authority must be enabled.', 'wp-native-builder-bridge' ) );
-			}
-			return $this->attach_remote_media( $temp_file, $filename, (int) $bytes, $input );
-		} finally {
-			if ( is_file( $temp_file ) ) {
-				wp_delete_file( $temp_file );
-			}
 		}
+		if ( ! $this->can_import_url( $input ) ) {
+			return $this->logged_error( $ability, 'media_import_permission_denied', __( 'Remote Media, Builder Write, and the required WordPress upload authority must be enabled.', 'wp-native-builder-bridge' ) );
+		}
+		return $this->attach_remote_media( $temp_file, $filename, (int) $bytes, $input, $state );
 	}
 
 	/**
@@ -721,17 +829,19 @@ final class Media_Abilities {
 	 * @param string              $filename Validated filename.
 	 * @param int                 $bytes     Downloaded length.
 	 * @param array<string,mixed> $input     Ability input.
+	 * @param array<string,mixed> $state     Invocation-owned cleanup and commit state.
 	 * @return array<string,mixed>|WP_Error
 	 */
-	private function attach_remote_media( $temp_file, $filename, $bytes, $input ) {
-		$ability    = 'wp-native-builder/media-import-url';
-		$file_array = array(
+	private function attach_remote_media( $temp_file, $filename, $bytes, $input, &$state ) {
+		$ability                   = 'wp-native-builder/media-import-url';
+		$file_array                = array(
 			'name'     => $filename,
 			'tmp_name' => $temp_file,
 			'error'    => 0,
 			'size'     => $bytes,
 		);
-		$upload     = wp_handle_sideload(
+		$state['sideload_started'] = true;
+		$upload                    = wp_handle_sideload(
 			$file_array,
 			array( 'test_form' => false )
 		);
@@ -739,12 +849,12 @@ final class Media_Abilities {
 			return $this->logged_error( $ability, 'media_import_sideload_failed', __( 'WordPress could not store the downloaded media.', 'wp-native-builder-bridge' ) );
 		}
 		// Destination paths come only from WordPress, never from Ability input.
-		$file = $upload['file'];
+		$file                      = $upload['file'];
+		$state['destination_file'] = $file;
 		if ( ! $this->can_import_url( $input ) ) {
-			wp_delete_file( $file );
 			return $this->logged_error( $ability, 'media_import_permission_denied', __( 'Remote Media, Builder Write, and the required WordPress upload authority must be enabled.', 'wp-native-builder-bridge' ) );
 		}
-		$post_data = array(
+		$post_data               = array(
 			'guid'           => $upload['url'],
 			'post_mime_type' => $upload['type'],
 			'post_title'     => isset( $input['title'] ) ? $input['title'] : pathinfo( $filename, PATHINFO_FILENAME ),
@@ -752,19 +862,24 @@ final class Media_Abilities {
 			'post_excerpt'   => isset( $input['caption'] ) ? $input['caption'] : '',
 			'post_status'    => 'inherit',
 		);
-		$post_id   = ! empty( $input['post_id'] ) ? (int) $input['post_id'] : 0;
-		$id        = wp_insert_attachment( wp_slash( $post_data ), $file, $post_id, true );
+		$post_id                 = ! empty( $input['post_id'] ) ? (int) $input['post_id'] : 0;
+		$state['insert_started'] = true;
+		$id                      = wp_insert_attachment( wp_slash( $post_data ), $file, $post_id, true );
 		if ( is_wp_error( $id ) || ! $id ) {
-			wp_delete_file( $file );
+			$state['insert_started'] = false;
 			return $this->logged_error( $ability, 'media_import_attachment_failed', __( 'WordPress could not create the imported attachment.', 'wp-native-builder-bridge' ) );
 		}
-		$id = (int) $id;
+		$id                     = (int) $id;
+		$state['attachment_id'] = $id;
 		wp_update_attachment_metadata( $id, wp_generate_attachment_metadata( $id, $file ) );
 		if ( array_key_exists( 'alt_text', $input ) ) {
 			update_post_meta( $id, '_wp_attachment_image_alt', sanitize_text_field( (string) $input['alt_text'] ) );
 		}
-		$this->log->record( $ability, 'attachment', $id, true, '' );
-		return $this->format_attachment( get_post( $id ) );
+		$attachment = get_post( $id );
+		if ( ! $attachment || 'attachment' !== $attachment->post_type || $id !== (int) $attachment->ID ) {
+			throw new \RuntimeException( 'The imported attachment is no longer available.' );
+		}
+		return $this->format_attachment( $attachment );
 	}
 
 	/**

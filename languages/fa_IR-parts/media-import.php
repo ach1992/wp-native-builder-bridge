@@ -14,4 +14,7 @@ return array(
 	'WordPress did not accept the downloaded file type.' => 'وردپرس نوع فایل دریافت‌شده را نپذیرفت.',
 	'WordPress could not store the downloaded media.' => 'وردپرس نتوانست رسانهٔ دریافت‌شده را ذخیره کند.',
 	'WordPress could not create the imported attachment.' => 'وردپرس نتوانست پیوست رسانهٔ درون‌ریزی‌شده را ایجاد کند.',
+	'The media import could not finish safely. Inspect the Media Library and upload storage before retrying.' => 'درون‌ریزی رسانه به‌صورت ایمن کامل نشد. پیش از تلاش دوباره، کتابخانهٔ رسانه و محل ذخیرهٔ بارگذاری‌ها را بررسی کنید.',
+	'The media import stopped after creating attachment %d. Inspect that Media Library item before retrying.' => 'درون‌ریزی رسانه پس از ایجاد پیوست %d متوقف شد. پیش از تلاش دوباره، آن مورد را در کتابخانهٔ رسانه بررسی کنید.',
+	'The media import stopped before attachment creation. Known temporary files were cleaned up.' => 'درون‌ریزی رسانه پیش از ایجاد پیوست متوقف شد. فایل‌های موقت شناخته‌شده پاک شدند.',
 );

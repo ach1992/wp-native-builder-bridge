@@ -20,15 +20,24 @@ function wpnb39_reset() {
 	$GLOBALS['wpnb39'] = array( 'files' => array(), 'staging' => array(), 'http_calls' => 0, 'payload' => 'media', 'max' => 32, 'status' => 200, 'length' => '', 'posts' => array(), 'meta' => array(), 'args' => array(), 'mode' => '', 'type' => true );
 }
 function sanitize_file_name( $name ) { return preg_replace( '/[^A-Za-z0-9._-]/', '-', $name ); }
-function wp_max_upload_size() { return $GLOBALS['wpnb39']['max']; }
+function wp_max_upload_size() {
+	if ( 'limit_throw' === $GLOBALS['wpnb39']['mode'] ) { throw new RuntimeException( 'private-token limit' ); }
+	return $GLOBALS['wpnb39']['max'];
+}
 function wp_tempnam( $name ) {
+	if ( 'temp_throw' === $GLOBALS['wpnb39']['mode'] ) { throw new RuntimeException( 'private-token temp' ); }
 	if ( 'temp_failure' === $GLOBALS['wpnb39']['mode'] ) { return false; }
 	$file = tempnam( sys_get_temp_dir(), 'wpnb39-' );
 	$GLOBALS['wpnb39']['files'][] = $file;
 	$GLOBALS['wpnb39']['staging'][] = $file;
+	if ( 'revoke_temp' === $GLOBALS['wpnb39']['mode'] ) { $GLOBALS['wpnb_test']['options'][ Settings::OPTION_NAME ]['remote_media'] = 0; }
 	return $file;
 }
-function wp_delete_file( $file ) { if ( is_file( $file ) ) { unlink( $file ); } }
+function wp_delete_file( $file ) {
+	if ( 'throw' === ( $GLOBALS['wpnb39']['cleanup_mode'] ?? '' ) ) { throw new RuntimeException( 'private-token ' . $file ); }
+	if ( 'noop' === ( $GLOBALS['wpnb39']['cleanup_mode'] ?? '' ) ) { return; }
+	if ( is_file( $file ) ) { unlink( $file ); }
+}
 function wp_http_validate_url( $url ) {
 	$parts = parse_url( $url );
 	return is_array( $parts ) && in_array( $parts['scheme'] ?? '', array( 'http', 'https' ), true ) && ! empty( $parts['host'] ) && ! isset( $parts['user'], $parts['pass'] ) && ! isset( $parts['user'] ) && ! in_array( $parts['host'], array( 'localhost', '127.0.0.1', '169.254.169.254' ), true ) ? $url : false;
@@ -47,29 +56,41 @@ function wp_remote_retrieve_response_code( $response ) { return $response['respo
 function wp_remote_retrieve_header( $response, $key ) { return $response['headers'][ $key ] ?? ''; }
 function get_allowed_mime_types() { return array( 'png' => 'image/png' ); }
 function wp_check_filetype_and_ext( $file, $name, $mimes ) {
+	if ( 'type_throw' === $GLOBALS['wpnb39']['mode'] ) { throw new RuntimeException( 'private-token ' . $file ); }
 	if ( ! $GLOBALS['wpnb39']['type'] ) { return array( 'ext' => false, 'type' => false, 'proper_filename' => false ); }
 	return array( 'ext' => 'png', 'type' => 'image/png', 'proper_filename' => $GLOBALS['wpnb39']['proper_filename'] ?? false );
 }
 function media_handle_sideload( $file, $parent = 0, $description = null, $post_data = array() ) { throw new RuntimeException( 'The URL importer must use its cleanup-aware WordPress lifecycle.' ); }
 function wp_handle_sideload( &$file, $overrides = false, $time = null ) {
+	if ( 'sideload_throw_before' === $GLOBALS['wpnb39']['mode'] ) { throw new RuntimeException( 'private-token before sideload' ); }
 	if ( 'sideload_error' === $GLOBALS['wpnb39']['mode'] ) { return array( 'error' => 'private-token ' . $file['tmp_name'] ); }
 	$target = $file['tmp_name'] . '-uploaded.png';
 	rename( $file['tmp_name'], $target );
 	$GLOBALS['wpnb39']['files'][] = $target;
+	if ( 'sideload_throw_after' === $GLOBALS['wpnb39']['mode'] ) { throw new RuntimeException( 'private-token ' . $target ); }
 	if ( 'revoke_sideload' === $GLOBALS['wpnb39']['mode'] ) { $GLOBALS['wpnb_test']['options'][ Settings::OPTION_NAME ]['remote_media'] = 0; }
 	return array( 'file' => $target, 'type' => 'image/png', 'url' => 'https://site.test/media.png' );
 }
 function wp_insert_attachment( $data, $file, $parent, $wp_error ) {
+	if ( 'insert_throw_before' === $GLOBALS['wpnb39']['mode'] ) { throw new RuntimeException( 'private-token before insert' ); }
 	if ( 'insert_error' === $GLOBALS['wpnb39']['mode'] ) { return new WP_Error( 'private-token', $file ); }
 	$id = 100 + count( $GLOBALS['wpnb39']['posts'] );
 	$GLOBALS['wpnb39']['posts'][ $id ] = (object) array_merge( $data, array( 'ID' => $id, 'post_parent' => $parent, 'post_type' => 'attachment', 'post_modified_gmt' => '2026-01-01 00:00:00' ) );
+	if ( 'insert_throw_after' === $GLOBALS['wpnb39']['mode'] ) { throw new RuntimeException( 'private-token committed insert' ); }
 	return $id;
 }
-function wp_generate_attachment_metadata( $id, $file ) { return array( 'width' => 1, 'height' => 1, 'filesize' => filesize( $file ) ); }
+function wp_generate_attachment_metadata( $id, $file ) {
+	if ( 'metadata_throw' === $GLOBALS['wpnb39']['mode'] ) { throw new RuntimeException( 'private-token ' . $file ); }
+	return array( 'width' => 1, 'height' => 1, 'filesize' => filesize( $file ) ); }
 function wp_update_attachment_metadata( $id, $metadata ) { $GLOBALS['wpnb39']['meta'][ $id ] = $metadata; return true; }
 function wp_get_attachment_metadata( $id ) { return $GLOBALS['wpnb39']['meta'][ $id ] ?? array(); }
-function wp_get_attachment_url( $id ) { return 'https://site.test/media/' . $id . '.png'; }
-function get_post( $id ) { return $GLOBALS['wpnb39']['posts'][ $id ] ?? null; }
+function wp_get_attachment_url( $id ) {
+	if ( 'output_throw' === $GLOBALS['wpnb39']['mode'] ) { throw new RuntimeException( 'private-token output' ); }
+	return 'https://site.test/media/' . $id . '.png'; }
+function get_post( $id ) {
+	if ( 'output_missing' === $GLOBALS['wpnb39']['mode'] ) { return null; }
+	return $GLOBALS['wpnb39']['posts'][ $id ] ?? null;
+}
 function get_post_meta( $id, $key, $single = false ) { return $GLOBALS['wpnb39']['meta'][ $id ][ $key ] ?? ''; }
 function update_post_meta( $id, $key, $value ) { $GLOBALS['wpnb39']['meta'][ $id ][ $key ] = $value; return true; }
 function wpnb39_no_files() {
@@ -130,6 +151,39 @@ try {
 	foreach ( array( 'temp_failure' => 'media_temp_failed', 'http_error' => 'media_import_http_failed', 'http_throw' => 'media_import_recovery_required', 'missing_staging' => 'media_import_size_invalid', 'revoke_http' => 'media_import_permission_denied', 'revoke_sideload' => 'media_import_permission_denied', 'sideload_error' => 'media_import_sideload_failed', 'insert_error' => 'media_import_attachment_failed' ) as $mode => $code ) {
 		wpnb39_reset(); $GLOBALS['wpnb39']['mode'] = $mode;
 		wpnb39_error( $media->import_url( $input ), $code );
+	}
+	foreach ( array( 'limit_throw', 'temp_throw', 'type_throw', 'sideload_throw_before' ) as $mode ) {
+		wpnb39_reset(); $GLOBALS['wpnb39']['mode'] = $mode;
+		wpnb39_error( $media->import_url( $input ), 'media_import_recovery_required' );
+	}
+	wpnb39_reset(); $GLOBALS['wpnb39']['mode'] = 'revoke_temp';
+	wpnb39_error( $media->import_url( $input ), 'media_import_permission_denied' );
+	wpnb39_assert( 0 === $GLOBALS['wpnb39']['http_calls'], 'Revocation during staging allocation still reached HTTP.' );
+	foreach ( array( 'sideload_throw_after', 'insert_throw_before', 'insert_throw_after', 'metadata_throw', 'output_throw', 'output_missing' ) as $mode ) {
+		wpnb39_reset(); $GLOBALS['wpnb39']['mode'] = $mode;
+		$result = $media->import_url( $input );
+		wpnb39_assert( is_wp_error( $result ) && 'media_import_recovery_required' === $result->get_error_code(), 'Partial import did not require recovery.' );
+		wpnb39_assert( false === strpos( $result->get_error_message(), 'private-token' ) && false === strpos( $result->get_error_message(), sys_get_temp_dir() ), 'Partial import leaked diagnostics.' );
+		$remaining = array_values( array_filter( $GLOBALS['wpnb39']['files'], 'is_file' ) );
+		wpnb39_assert( 1 === count( $remaining ), 'Unconfirmed or committed native state was blindly deleted.' );
+		foreach ( $GLOBALS['wpnb39']['staging'] as $file ) { wpnb39_assert( ! is_file( $file ), 'Partial import retained temporary staging.' ); }
+		if ( in_array( $mode, array( 'insert_throw_after', 'metadata_throw', 'output_throw', 'output_missing' ), true ) ) {
+			wpnb39_assert( 1 === count( $GLOBALS['wpnb39']['posts'] ), 'Committed attachment was not preserved.' );
+		}
+		if ( in_array( $mode, array( 'metadata_throw', 'output_throw', 'output_missing' ), true ) ) {
+			wpnb39_assert( false !== strpos( $result->get_error_message(), '100' ), 'Known attachment identity was lost from recovery guidance.' );
+		}
+		$audit = get_option( Mutation_Log::OPTION_NAME, array() );
+		wpnb39_assert( false === $audit[0]['success'] && false === strpos( json_encode( $audit ), 'private-token' ), 'Partial failure audit was unsafe or claimed success.' );
+	}
+	foreach ( array( 'throw', 'noop' ) as $cleanup_mode ) {
+		wpnb39_reset();
+		$GLOBALS['wpnb39']['mode'] = 'http_error';
+		$GLOBALS['wpnb39']['cleanup_mode'] = $cleanup_mode;
+		$result = $media->import_url( $input );
+		wpnb39_assert( is_wp_error( $result ) && 'media_import_recovery_required' === $result->get_error_code(), 'Cleanup failure was hidden.' );
+		wpnb39_assert( false === strpos( $result->get_error_message(), 'private-token' ), 'Cleanup exception leaked diagnostics.' );
+		wpnb39_assert( 1 === count( array_filter( $GLOBALS['wpnb39']['files'], 'is_file' ) ), 'Cleanup fixture did not retain the expected owned file.' );
 	}
 	foreach ( array( 206, 301, 404, 500 ) as $status ) {
 		wpnb39_reset(); $GLOBALS['wpnb39']['status'] = $status;
