@@ -182,7 +182,7 @@ final class Ability_Catalog_Abilities {
 	 * @return bool
 	 */
 	private function is_json_data( $value, &$remaining, $depth = 0 ) {
-		if ( $depth > 64 || is_resource( $value ) || ( is_object( $value ) && ! $value instanceof \stdClass ) ) {
+		if ( $depth > 64 || is_resource( $value ) || ( is_object( $value ) && 'stdClass' !== get_class( $value ) ) ) {
 			return false;
 		}
 		$remaining -= is_string( $value ) ? strlen( $value ) : 1;

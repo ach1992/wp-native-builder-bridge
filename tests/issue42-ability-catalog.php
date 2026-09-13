@@ -126,6 +126,12 @@ $fixture->input = array( 'type' => 'string' );
 $long_name = 'unknown-provider/' . str_repeat( 'a', 300 );
 $GLOBALS['wpnb_test']['abilities'][ $long_name ] = new WPNB_Catalog_Test_Ability( $long_name );
 wpnb_catalog_assert( ! is_wp_error( $catalog->read( array( 'action' => 'get', 'name' => $long_name ) ) ), 'Valid registered names must not be rejected by an invented provider/name allowlist.' );
+$fixture->input = array( 'type' => 'object', 'default' => new class extends stdClass implements JsonSerializable {
+	public function jsonSerialize(): mixed { throw new RuntimeException( 'A stdClass subclass must not execute custom serialization during inspection.' ); }
+} );
+wpnb_catalog_assert( 'ability_contract_unrepresentable' === $catalog->read( array( 'action' => 'get', 'name' => $name ) )->get_error_code(), 'A derived stdClass must be rejected before custom JSON serialization.' );
+$fixture->input = array( 'type' => 'object', 'default' => new stdClass() );
+wpnb_catalog_assert( ! is_wp_error( $catalog->read( array( 'action' => 'get', 'name' => $name ) ) ), 'Plain JSON object defaults must remain supported.' );
 $exposure_cases = array(
 	array( array( 'public' => true, 'mcp' => 'malformed' ), false ),
 	array( array( 'public' => true, 'mcp' => false ), false ),
