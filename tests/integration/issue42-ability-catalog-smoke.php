@@ -37,6 +37,13 @@ try {
 	wpnb_issue42_assert( is_wp_error( $large_schema ) && 'ability_catalog_response_too_large' === $large_schema->get_error_code(), 'Oversized contract must fail rather than truncate.' );
 	foreach ( array( 'catalog-hidden/malformed', 'catalog-hidden/string-public', 'catalog-hidden/optout', 'catalog-fixture/operation-000' ) as $probe_name ) {
 		$probe = wp_get_ability( $probe_name );
+		if ( null === $probe ) {
+			// Newer Core rejects non-boolean meta.public during registration itself.
+			// This is an earlier native denial, not permission to skip hidden-contract tests.
+			wpnb_issue42_assert( 'catalog-hidden/string-public' === $probe_name, 'A valid exposure fixture unexpectedly failed to register.' );
+			wpnb_issue42_assert( is_wp_error( $catalog->execute( array( 'action' => 'get', 'name' => $probe_name ) ) ), 'A Core-rejected contract must remain unavailable through the Bridge.' );
+			continue;
+		}
 		$native_public = \WP\MCP\Abilities\McpAbilityExposure::is_public( $probe );
 		$bridge_public = ( new \WP_Native_Builder_Bridge\Abilities\Ability_Resolver() )->is_mcp_exposed( $probe );
 		wpnb_issue42_assert( $native_public === $bridge_public, 'Bridge exposure must match the pinned Adapter on the actual registered object.' );
