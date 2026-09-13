@@ -16,6 +16,7 @@ final class Settings {
 
 	const GROUP_SITE_READ         = 'site_read';
 	const GROUP_BUILDER_WRITE     = 'builder_write';
+	const GROUP_REMOTE_MEDIA      = 'remote_media';
 	const GROUP_LIVE_CONTENT      = 'live_content';
 	const GROUP_SITE_CONFIG       = 'site_configuration';
 	const GROUP_ADVANCED_METADATA = 'advanced_metadata';
@@ -56,6 +57,12 @@ final class Settings {
 			self::GROUP_BUILDER_WRITE     => array(
 				'label'       => __( 'Builder Write', 'wp-native-builder-bridge' ),
 				'description' => __( 'Create and update drafts, content, blocks, media, taxonomies, navigation, and forms.', 'wp-native-builder-bridge' ),
+				'default'     => false,
+				'warning'     => true,
+			),
+			self::GROUP_REMOTE_MEDIA      => array(
+				'label'       => __( 'Remote Media', 'wp-native-builder-bridge' ),
+				'description' => __( 'Allow downloads from safe HTTP(S) URLs into the Media Library. Builder Write and WordPress upload capabilities are also required.', 'wp-native-builder-bridge' ),
 				'default'     => false,
 				'warning'     => true,
 			),

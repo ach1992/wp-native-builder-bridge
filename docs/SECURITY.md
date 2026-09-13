@@ -4,7 +4,7 @@ WP Native Builder Bridge is designed as a bounded WordPress capability layer, no
 
 ## Layered authorization
 
-A successful operation must satisfy every applicable layer:
+Bridge-owned operations must satisfy every applicable layer:
 
 1. valid OAuth-authenticated WordPress identity for direct ChatGPT connections;
 2. the relevant Bridge access group;
@@ -12,12 +12,13 @@ A successful operation must satisfy every applicable layer:
 4. any provider-native permission check used by an integration;
 5. operation-specific live-state, destructive, and stale-state rules.
 
-OAuth never enables a Bridge access group and never grants a WordPress capability.
+OAuth never enables a Bridge access group and never grants a WordPress capability. Native provider operations retain their own permission callbacks; current Bridge groups do not uniformly govern provider-native execution. See [current delegation coverage](ARCHITECTURE.md#delegation-current-behavior-and-required-evolution); disabling a Bridge write group is not universal provider-write revocation.
 
 ## Access groups
 
 - **Site Read** — read-only inspection surfaces.
 - **Builder Write** — bounded content/site-building mutations.
+- **Remote Media** - default-off outbound media import; Builder Write and native upload/parent authority remain required.
 - **Live Content** — publishing and other live-state transitions.
 - **Site Configuration** — bounded global configuration.
 - **Advanced Metadata** — protected/private post and term metadata for exact WordPress objects the connected user may edit; disabled by default and intentionally separate from ordinary Site Read/Builder Write access.
@@ -92,6 +93,19 @@ Generic content/Gutenberg operations remain limited to their existing eligible e
 Media upload accepts bytes and a filename, writes only to a WordPress-generated temporary path, and hands the result to WordPress media/sideload handling. The caller cannot specify a server filesystem path.
 
 The payload cap is the smaller of the WordPress upload limit and 20 MiB.
+
+## Remote media boundary
+
+URL import is separately default-off, including upgrades where Builder Write was already enabled. It uses native safe HTTP(S) URL/redirect validation and TLS verification without relaxing WordPress security filters. Requests stream to a WordPress-owned staging file with a finite timeout, redirect budget, and current upload-limit-plus-one byte cap. WordPress then owns MIME/sideload/attachment handling. Neither arbitrary request headers/cookies nor caller-chosen server paths are accepted.
+
+Authority is rechecked before network activity and before file/attachment mutation, including after temporary-file allocation. Permission-hook exceptions fail closed. Ordinary failures remove known staging files; a returned insertion error or revoked authority before insertion removes only the known newly uploaded destination. The importer rejects executable filenames and never performs package extraction/installation. Expected errors and unexpected import/cleanup exceptions are redacted rather than forwarding provider/HTTP messages containing signed URLs, response bodies or filesystem paths. Mutation logs contain only operation/attachment identity, success and a bounded error code.
+
+Unexpected exceptions, failed cleanup, or failed final audit reporting produce `media_import_recovery_required`, not success. Known cleanup is verified without retrying failed deletion hooks. A native sideload or insert can mutate state before throwing and returning its path/ID; unknown or potentially committed state is retained for inspection, not deleted based on a missing return value. Already-returned attachment IDs remain available in recovery guidance. A fixed English fallback prevents a failing translation or audit hook from disclosing another exception; it does not guarantee audit persistence. This boundary covers the import callbacks and known cleanup, not arbitrary PHP output or hooks executed by Core/Adapter outside the import callback.
+
+The import adds private/reserved-address checks to native URL validation: all returned IPv4 resolver addresses and available DNS A/AAAA records must pass PHP address validation (including the global-range flag where supported). The same check runs through the native Requests redirect hook, scoped to the invocation-owned stream filename and removed in `finally`; unrelated HTTP requests are not governed by this temporary callback. Core URL/TLS checks and finite redirect limits are not relaxed. The native fixture proves that reserved initial URLs fail before HTTP and reserved redirect targets are refused by the actual Core/Requests hook dispatcher without connecting to those targets. Resolver checks are not DNS pinning: transport re-resolution, a configured proxy, trusted PHP hooks and hosting egress policy remain separate environmental boundaries.
+
+
+This contract does not make imports transactional or retries idempotent. A process crash or arbitrary provider hook can have effects beyond temporary-file cleanup. Core networking and installed filters remain authoritative; native safe HTTP is not a promise of isolation from malicious PHP or a replacement for deployment egress restrictions.
 
 ## Extension boundary
 

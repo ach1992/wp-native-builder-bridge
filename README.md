@@ -80,6 +80,7 @@ Bridge permissions are additive to normal WordPress capabilities. Enabling a Bri
 | --- | --- |
 | **Site Read** | Inspect site information, content, media, navigation, extensions, integrations, and Workspace state. |
 | **Builder Write** | Create and update drafts, content, Gutenberg blocks, media, taxonomies, navigation, forms, and Workspace objects. |
+| **Remote Media** | Import safe HTTP(S) media into the Media Library; Builder Write and native upload authority are also required. |
 | **Live Content** | Permit publishing and other live-content status changes when WordPress also permits them. |
 | **Site Configuration** | Permit bounded global WordPress/theme configuration changes. |
 | **Advanced Metadata** | Permit generic read/update of protected/private post and term metadata for exact objects the connected user may edit, including private/non-REST CPTs and taxonomies; credential-like keys, options, user meta, and Workspace internals remain excluded. |
@@ -92,11 +93,13 @@ Only **Site Read** is enabled by default.
 
 `wp-native-builder/media-upload` accepts file bytes plus a filename and hands them to WordPress Media Library handling. The maximum payload is the smaller of the WordPress upload limit and **20 MiB**. The caller cannot choose a server filesystem path.
 
+`wp-native-builder/media-import-url` accepts a public HTTP(S) URL and a filename, streams it within the current WordPress upload limit, and creates a normal attachment. It requires explicit **Remote Media** plus **Builder Write** access; upgrades do not enable it automatically. See [URL media import](./docs/ABILITIES.md#url-media-import).
+
 Plugin/theme installation is deliberately narrower: it accepts WordPress.org slugs through WordPress administration APIs. The Bridge does **not** expose arbitrary ZIP/PHP upload, arbitrary package URLs, shell commands, SQL, generic filesystem access, arbitrary WordPress options/user-meta administration, or credential retrieval.
 
 ## Optional integrations
 
-Integration is discovery-first: provider-owned public WordPress Abilities are reused at runtime, so a compatible new plugin or theme should normally require no Bridge-specific code. Provider fallbacks are reserved for bounded gaps with documented public APIs. Generic post and term metadata is provider-neutral and does not require a new Bridge adapter merely because a plugin/theme stores state in `post_meta` or `term_meta`. See [Architecture](./docs/ARCHITECTURE.md#discovery-first-provider-architecture).
+Integration is discovery-first: provider-owned public WordPress Abilities are reused at runtime, so a compatible new plugin or theme should normally require no Bridge-specific code. Provider fallbacks are reserved for bounded gaps with documented public APIs. Generic post and term metadata is provider-neutral and does not require a new Bridge adapter merely because a plugin/theme stores state in `post_meta` or `term_meta`. See [Architecture](./docs/ARCHITECTURE.md#discovery-and-reuse).
 
 - **Astra / Astra Pro:** enable Astra's **Abilities** setting. A separate Astra MCP server is not required for this Bridge setup.
 - **Code Snippets:** compatible provider APIs are used for managed snippet lifecycle; the Bridge does not directly evaluate submitted code.

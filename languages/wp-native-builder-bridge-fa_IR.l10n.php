@@ -6,7 +6,8 @@ $messages = array_merge(
 	require __DIR__ . '/fa_IR-parts/part-4.php',
 	require __DIR__ . '/fa_IR-parts/part-5.php',
 	require __DIR__ . '/fa_IR-parts/part-6.php',
-	require __DIR__ . '/fa_IR-parts/ability-catalog.php'
+	require __DIR__ . '/fa_IR-parts/ability-catalog.php',
+	require __DIR__ . '/fa_IR-parts/media-import.php'
 );
 
 return array(
