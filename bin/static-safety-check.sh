@@ -63,13 +63,13 @@ if [[ -f "$metadata_store" ]]; then
     fi
 fi
 
-# Issue #36 adds exactly one termmeta-only persistence owner. Do not relax the
+# Issue #36 writes only termmeta; native term tables appear only in identity joins. Do not relax the
 # postmeta assertions above: the shipped postmeta CAS surface remains unchanged.
 if [[ ! -f "$term_metadata_store" ]]; then
     echo "ERROR: bounded term-meta store is missing." >&2
     exit 1
 fi
-if grep -nE '\$wpdb->[A-Za-z_][A-Za-z0-9_]*' "$term_metadata_store" | grep -vE '\$wpdb->(termmeta|last_error|get_results|insert|prepare|query)([^A-Za-z0-9_]|$)'; then
+if grep -nE '\$wpdb->[A-Za-z_][A-Za-z0-9_]*' "$term_metadata_store" | grep -vE '\$wpdb->(termmeta|term_taxonomy|terms|last_error|insert_id|get_results|get_var|prepare|query)([^A-Za-z0-9_]|$)'; then
     echo "ERROR: term-meta store exceeded its fixed termmeta persistence surface." >&2
     exit 1
 fi
@@ -80,14 +80,14 @@ fi
 term_prepare_count="$(grep -cF '$wpdb->prepare(' "$term_metadata_store" || true)"
 term_query_count="$(grep -cF '$wpdb->query(' "$term_metadata_store" || true)"
 term_read_count="$(grep -cF '$wpdb->get_results(' "$term_metadata_store" || true)"
-term_insert_count="$(grep -cF '$wpdb->insert(' "$term_metadata_store" || true)"
-term_binary_key_count="$(grep -cF 'CAST(meta_key AS BINARY) = CAST(%s AS BINARY)' "$term_metadata_store" || true)"
-term_binary_value_count="$(grep -cF 'CAST(meta_value AS BINARY) = CAST(%s AS BINARY)' "$term_metadata_store" || true)"
+term_unique_read_count="$(grep -cF '$wpdb->get_var(' "$term_metadata_store" || true)"
+term_binary_key_count="$(grep -cF 'CAST(m.meta_key AS BINARY) = CAST(%s AS BINARY)' "$term_metadata_store" || true)"
+term_binary_value_count="$(grep -cF 'CAST(m.meta_value AS BINARY) = CAST(%s AS BINARY)' "$term_metadata_store" || true)"
 term_null_count="$(grep -cF 'meta_value IS NULL' "$term_metadata_store" || true)"
-term_set_null_count="$(grep -cF 'SET meta_value = NULL' "$term_metadata_store" || true)"
-term_set_string_count="$(grep -cF 'SET meta_value = %s' "$term_metadata_store" || true)"
-if [[ "$term_prepare_count" != 8 || "$term_query_count" != 6 || "$term_read_count" != 2 || "$term_insert_count" != 1 || "$term_binary_key_count" != 7 || "$term_binary_value_count" != 3 || "$term_null_count" != 3 || "$term_set_null_count" != 2 || "$term_set_string_count" != 2 ]]; then
-    echo "ERROR: term-meta persistence must contain two bounded reads, six byte-exact CAS branches, and one fixed-row restoration." >&2
+term_set_null_count="$(grep -cF 'SET m.meta_value = NULL' "$term_metadata_store" || true)"
+term_set_string_count="$(grep -cF 'SET m.meta_value = %s' "$term_metadata_store" || true)"
+if [[ "$term_prepare_count" != 11 || "$term_query_count" != 8 || "$term_read_count" != 2 || "$term_unique_read_count" != 1 || "$term_binary_key_count" != 6 || "$term_binary_value_count" != 3 || "$term_null_count" != 3 || "$term_set_null_count" != 2 || "$term_set_string_count" != 2 ]]; then
+    echo "ERROR: term-meta persistence must retain two bounded reads, one native uniqueness check, six identity-bound CAS branches, and two conditional insert branches." >&2
     exit 1
 fi
 if [[ "$(grep -cF 'SELECT meta_id, term_id, meta_key, CASE WHEN OCTET_LENGTH(meta_value) <= 1048576 THEN meta_value ELSE NULL END AS meta_value, OCTET_LENGTH(meta_value) AS value_bytes FROM %i WHERE term_id = %d AND CAST(meta_key AS BINARY) = CAST(%s AS BINARY) ORDER BY meta_id LIMIT 2' "$term_metadata_store" || true)" != 1 || "$(grep -cF 'SELECT MIN(meta_key) AS meta_key, COUNT(*) AS row_count FROM %i WHERE term_id = %d AND meta_key IS NOT NULL GROUP BY CAST(meta_key AS BINARY) ORDER BY CAST(meta_key AS BINARY) LIMIT %d OFFSET %d' "$term_metadata_store" || true)" != 1 ]]; then

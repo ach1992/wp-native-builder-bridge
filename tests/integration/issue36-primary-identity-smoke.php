@@ -41,15 +41,36 @@ try {
     $read = wp_get_ability( 'wp-native-builder/term-meta-read' );
     $update = wp_get_ability( 'wp-native-builder/term-meta-update' );
     $delete = wp_get_ability( 'wp-native-builder/term-meta-delete' );
+    // Preserve both conditional-insert storage branches and the native key column bound.
+    $fixture = $require( wp_insert_term( 'Primary identity positive controls', $taxonomy ), 'Create positive term' );
+    $term_id = (int) $fixture['term_id'];
+    $original_tt = (int) $fixture['term_taxonomy_id'];
+    try {
+        $target = array( 'term_id' => $term_id, 'taxonomy' => $taxonomy );
+        foreach ( array( '_positive_string' => 'value', '_positive_null' => null, str_repeat( 'k', 255 ) => 'full-key', str_repeat( "\xc3\xa9", 255 ) => 'unicode-key' ) as $key => $value ) {
+            $state = $require( $read->execute( $target + array( 'key' => $key ) ), 'Read positive fixture' );
+            $result = $update->execute( $target + array( 'key' => $key, 'value_json' => wp_json_encode( $value ), 'expected_state_hash' => $state['items'][0]['state_hash'] ) );
+            $ok( ! is_wp_error( $result ), 'Conditional creation rejected a valid native storage value.' );
+            $rows = array_values( array_filter( $raw_rows( $term_id ), static fn( $row ) => $key === $row['meta_key'] ) );
+            $ok( 1 === count( $rows ) && $value === $rows[0]['meta_value'], 'Conditional creation changed the key/value storage representation.' );
+        }
+        $key = str_repeat( 'k', 256 );
+        $state = $require( $read->execute( $target + array( 'key' => $key ) ), 'Read oversized key absence' );
+        $before = $raw_rows( $term_id );
+        $result = $update->execute( $target + array( 'key' => $key, 'value_json' => '"not-stored"', 'expected_state_hash' => $state['items'][0]['state_hash'] ) );
+        $ok( is_wp_error( $result ) && 'term_meta_key_not_storable' === $result->get_error_code() && $before === $raw_rows( $term_id ), 'Oversized key was silently truncated or changed existing metadata.' );
+    } finally { wp_delete_term( $term_id, $taxonomy ); $term_id = 0; }
     foreach ( array( 'create', 'update', 'delete' ) as $operation ) {
+        $variants = 'update' === $operation ? array( array( 'original', 'bridge' ), array( null, 'bridge' ), array( 'original', null ) ) : array( array( 'original', 'bridge' ), array( null, null ) );
+        foreach ( $variants as $variant_index => $variant ) {
         foreach ( array( 'taxonomy', 'term_taxonomy_id' ) as $drift ) {
-            $fixture = $require( wp_insert_term( 'Primary identity ' . $operation . ' ' . $drift, $taxonomy ), 'Create isolated term' );
+            $fixture = $require( wp_insert_term( 'Primary identity ' . $operation . ' ' . $drift . ' ' . $variant_index, $taxonomy ), 'Create isolated term' );
             $term_id = (int) $fixture['term_id'];
             $original_tt = (int) $fixture['term_taxonomy_id'];
             $replacement_tt = (int) $wpdb->get_var( "SELECT MAX(term_taxonomy_id) FROM {$wpdb->term_taxonomy}" ) + 100;
             $key = '_primary_identity';
             try {
-                if ( 'create' !== $operation ) { $require( add_term_meta( $term_id, $key, 'original', true ), 'Initialize isolated metadata' ); }
+                if ( 'create' !== $operation ) { $require( add_term_meta( $term_id, $key, $variant[0], true ), 'Initialize isolated metadata' ); }
                 $target = array( 'term_id' => $term_id, 'taxonomy' => $taxonomy );
                 $state = $require( $read->execute( $target + array( 'key' => $key ) ), 'Read isolated state' );
                 $before = $raw_rows( $term_id );
@@ -67,11 +88,11 @@ try {
                 };
                 add_filter( 'query', $query_hook, PHP_INT_MAX );
                 $input = $target + array( 'key' => $key, 'expected_state_hash' => $state['items'][0]['state_hash'] );
-                $result = 'delete' === $operation ? $delete->execute( $input ) : $update->execute( $input + array( 'value_json' => '"bridge"' ) );
+                $result = 'delete' === $operation ? $delete->execute( $input ) : $update->execute( $input + array( 'value_json' => wp_json_encode( $variant[1] ) ) );
                 remove_filter( 'query', $query_hook, PHP_INT_MAX );
                 $query_hook = null;
                 $current = get_term( $term_id );
-                $case = $operation . '/' . $drift;
+                $case = $operation . '/' . $drift . '/' . $variant_index;
                 $ok( 1 === $interceptions, 'Primary write boundary was not exercised: ' . $case );
                 $ok( $current && ! is_wp_error( $current ) && ( 'taxonomy' === $drift ? $other_taxonomy === $current->taxonomy : $replacement_tt === (int) $current->term_taxonomy_id ), 'Fixture did not transfer the exact current identity: ' . $case );
                 $ok( is_wp_error( $result ), 'Primary mutation reported success for a changed target: ' . $case );
@@ -84,6 +105,7 @@ try {
                 wp_delete_term( $term_id, $taxonomy );
                 $term_id = 0;
             }
+        }
         }
     }
 } catch ( Throwable $exception ) {
@@ -102,4 +124,4 @@ try {
     }
 }
 if ( $failures ) { foreach ( $failures as $failure ) { fwrite( STDERR, 'FAIL: ' . $failure . "\n" ); } exit( 1 ); }
-echo "PASS: {$checks} primary term identity assertions (six mutation-boundary transfers).\n";
+echo "PASS: {$checks} primary term identity assertions (14 mutation-boundary transfers, including NULL/string branches).\n";

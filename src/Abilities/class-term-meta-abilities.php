@@ -427,7 +427,8 @@ final class Term_Meta_Abilities {
 			$value,
 			function ( $sanitized ) use ( $term, $key ) {
 				return $this->can_access_meta_key( $term, $key, 'add' ) && ! is_wp_error( $this->unsupported_stored_value_error( $sanitized ) );
-			}
+			},
+			$target_identity
 		);
 		if ( is_wp_error( $creation ) ) {
 			return $this->logged_error( $creation, $term->term_id, 'wp-native-builder/term-meta-update' );

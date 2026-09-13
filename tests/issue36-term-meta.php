@@ -174,6 +174,10 @@ try {
         str_replace( '$wpdb->termmeta', '$wpdb->options', $store_source ),
         str_replace( '$wpdb->get_results(', '$database->get_results(', $store_source ),
         str_replace( '$wpdb->prepare(', '$wpdb->$method(', $store_source ),
+        str_replace( 'AND tt.term_taxonomy_id = %d', 'OR tt.term_taxonomy_id = %d', $store_source ),
+        str_replace( '$wpdb->term_taxonomy', '$wpdb->options', $store_source ),
+        str_replace( ' LOCK IN SHARE MODE', '', $store_source ),
+        str_replace( "\$target['target_term_taxonomy_id']", '0', $store_source ),
     ) as $invalid_source ) {
         file_put_contents( $fixture, $invalid_source );
         $output = array(); $status = 0;

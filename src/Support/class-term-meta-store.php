@@ -14,6 +14,7 @@ use WP_Error;
  *
  * This class is intentionally not a generic database abstraction. It only operates on
  * fixed wp_termmeta columns after the Ability layer has authorized one exact term/taxonomy/key.
+ * Native terms/term_taxonomy joins only prove that same live identity at persistence.
  */
 final class Term_Meta_Store {
 	const MAX_VALUE_BYTES = 1048576;
@@ -175,7 +176,7 @@ final class Term_Meta_Store {
 	 * Prepares a JSON-decoded value exactly as WordPress stores term metadata.
 	 *
 	 * Existing-row direct persistence needs to run the same sanitizer Core would run.
-	 * Creation does not call this method because add_term_meta() owns its one sanitizer pass.
+	 * Creation owns its one sanitizer pass before the completed native creation filters.
 	 *
 	 * @param int    $term_id Term ID.
 	 * @param string $key     Exact unslashed key.
@@ -196,84 +197,77 @@ final class Term_Meta_Store {
 	}
 
 	/**
-	 * Creates through Core with one sanitizer pass and observes the original invocation.
-	 * Non-null provider short circuits are never evidence of physical row ownership.
+	 * Preserves Core's creation lifecycle around a target-conditioned physical insert.
 	 *
-	 * @param int      $term_id Term ID.
-	 * @param string   $key     Exact unslashed key.
-	 * @param mixed    $value   JSON-decoded value.
-	 * @param callable $guard   Internal target/authorization/value guard, not client input.
+	 * Core add_term_meta() cannot bind taxonomy identity in its INSERT. Do not rewrite
+	 * its queries or run persistence inside the provider's filter pipeline. Complete
+	 * that pipeline first, then keep Core's uniqueness and lifecycle order explicitly.
+	 *
+	 * @param int                 $term_id Term ID.
+	 * @param string              $key     Exact unslashed key.
+	 * @param mixed               $value   JSON-decoded unslashed value.
+	 * @param callable            $guard   Internal target/authorization/value guard.
+	 * @param array<string,mixed> $target  Original authorized scalar target identity.
 	 * @return array<string,mixed>|WP_Error
 	 */
-	public function create_unique_row( $term_id, $key, $value, callable $guard ) {
-		global $wp_current_filter;
-		$term_id    = (int) $term_id;
-		$key        = (string) $key;
-		$base_depth = count( (array) $wp_current_filter );
-		$captured   = false;
-		$continued  = false;
-		$sanitized  = null;
-		$added_id   = 0;
-		$refused    = false;
-		$capture    = function ( $check, $object_id, $meta_key, $meta_value, $unique ) use ( $term_id, $key, $base_depth, $guard, &$captured, &$continued, &$sanitized, &$refused ) {
-			global $wp_current_filter;
-			if ( count( (array) $wp_current_filter ) !== $base_depth + 1 || (int) $object_id !== $term_id || $meta_key !== $key || ! $unique ) {
-				return $check;
-			}
-			$captured  = true;
-			$sanitized = $meta_value;
-			if ( null !== $check ) {
-				return $check;
-			}
-			if ( ! $guard( $meta_value ) ) {
-				$refused = true;
-				return false;
-			}
-			$prepared = $this->stored_value( $meta_value );
-			if ( strlen( (string) $prepared['raw_value'] ) > self::MAX_VALUE_BYTES ) {
-				$refused = true;
-				return false;
-			}
-			$continued = true;
-			return $check;
-		};
-		$observe    = static function ( $meta_id, $object_id, $meta_key ) use ( $term_id, $key, $base_depth, &$added_id ) {
-			global $wp_current_filter;
-			if ( count( (array) $wp_current_filter ) === $base_depth + 1 && (int) $object_id === $term_id && $meta_key === $key ) {
-				$added_id = (int) $meta_id;
-			}
-		};
-		add_filter( 'add_term_metadata', $capture, PHP_INT_MAX, 5 );
-		add_action( 'added_term_meta', $observe, PHP_INT_MIN, 4 );
-		try {
-			$result = add_term_meta( $term_id, wp_slash( $key ), wp_slash( $value ), true );
-		} finally {
-			remove_filter( 'add_term_metadata', $capture, PHP_INT_MAX );
-			remove_action( 'added_term_meta', $observe, PHP_INT_MIN );
-		}
-		if ( is_wp_error( $result ) ) {
-			return $result;
-		}
-		if ( $refused ) {
-			return new WP_Error( 'term_meta_create_refused', __( 'The sanitized term metadata value or current target authority does not permit safe creation.', 'wp-native-builder-bridge' ) );
-		}
-		if ( ! $captured ) {
+	public function create_unique_row( $term_id, $key, $value, callable $guard, array $target ) {
+		global $wpdb;
+		$term_id = (int) $term_id;
+		$key     = (string) $key;
+		if ( ! $this->valid_target_identity( $target ) ) {
 			return $this->state_error();
 		}
-		if ( ! $continued ) {
-			return new WP_Error( 'term_meta_atomic_mutation_unsupported', __( 'WordPress cannot condition this metadata value atomically. The generic Bridge refuses the mutation to avoid a stale write.', 'wp-native-builder-bridge' ) );
+		// Match the native termmeta key column; direct SQL must not silently truncate it.
+		if ( 1 !== preg_match( '/\A.{1,255}\z/us', $key ) ) {
+			return new WP_Error( 'term_meta_key_not_storable', __( 'The metadata key must fit the native WordPress 255-character storage limit.', 'wp-native-builder-bridge' ) );
+		}
+		// Inputs are already unslashed, as after Core's one unslash pass. Use the
+		// authorized subtype, and recheck the same target after extensible callbacks.
+		$sanitized = sanitize_meta( $key, $value, 'term', $target['target_taxonomy'] );
+		$check     = apply_filters( 'add_term_metadata', null, $term_id, $key, $sanitized, true );
+		if ( null !== $check ) {
+			return is_wp_error( $check ) ? $check : new WP_Error( 'term_meta_atomic_mutation_unsupported', __( 'WordPress cannot condition this metadata value atomically. The generic Bridge refuses the mutation to avoid a stale write.', 'wp-native-builder-bridge' ) );
+		}
+		if ( ! $guard( $sanitized ) ) {
+			return new WP_Error( 'term_meta_create_refused', __( 'The sanitized term metadata value or current target authority does not permit safe creation.', 'wp-native-builder-bridge' ) );
 		}
 		$prepared = $this->stored_value( $sanitized );
+		if ( strlen( (string) $prepared['raw_value'] ) > self::MAX_VALUE_BYTES ) {
+			return new WP_Error( 'term_meta_create_refused', __( 'The sanitized term metadata value or current target authority does not permit safe creation.', 'wp-native-builder-bridge' ) );
+		}
+		// Core's unique check intentionally uses the column's normal key collation.
+		// It is still a precheck, not a new unique constraint or serializable protocol.
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- Core-equivalent fixed termmeta uniqueness precheck.
+		$existing = $wpdb->get_var( $wpdb->prepare( 'SELECT COUNT(*) FROM %i WHERE meta_key = %s AND term_id = %d', $wpdb->termmeta, $key, $term_id ) );
+		if ( null === $existing || '' !== $wpdb->last_error ) {
+			return $this->state_error();
+		}
+		$row    = array(
+			'meta_id'   => 0,
+			'term_id'   => $term_id,
+			'key'       => $key,
+			'raw_value' => $prepared['raw_value'],
+			'value'     => $prepared['value'],
+		) + $target;
+		$result = false;
+		if ( 0 === (int) $existing ) {
+			do_action( 'add_term_meta', $term_id, $key, $sanitized );
+			if ( ! $guard( $sanitized ) ) {
+				return new WP_Error( 'term_meta_create_refused', __( 'The sanitized term metadata value or current target authority does not permit safe creation.', 'wp-native-builder-bridge' ) );
+			}
+			$inserted = $this->insert_raw_row( $row );
+			if ( 1 === $inserted ) {
+				// Capture this statement's ID before an observer can perform a nested insert.
+				$result         = (int) $wpdb->insert_id;
+				$row['meta_id'] = $result;
+				wp_cache_delete( $term_id, 'term_meta' );
+				do_action( 'added_term_meta', $result, $term_id, $key, $sanitized );
+			}
+		}
 		return array(
 			'result'       => $result,
-			'owned'        => $continued && is_int( $result ) && $result > 0 && $added_id === $result,
-			'expected_row' => array(
-				'meta_id'   => is_int( $result ) ? $result : 0,
-				'term_id'   => $term_id,
-				'key'       => $key,
-				'raw_value' => $prepared['raw_value'],
-				'value'     => $prepared['value'],
-			),
+			'owned'        => is_int( $result ) && $result > 0,
+			'expected_row' => $row,
 		);
 	}
 
@@ -317,7 +311,7 @@ final class Term_Meta_Store {
 			return new WP_Error( 'term_meta_permission_denied', __( 'The current WordPress user is not allowed to perform this metadata operation.', 'wp-native-builder-bridge' ) );
 		}
 
-		$result = $this->exact_update_raw_row( $meta_id, (int) $term_id, (string) $key, $row['raw_value'], $prepared['raw_value'] );
+		$result = $this->exact_update_raw_row( $meta_id, (int) $term_id, (string) $key, $row['raw_value'], $prepared['raw_value'], $row );
 		if ( false === $result ) {
 			wp_cache_delete( (int) $term_id, 'term_meta' );
 			return new WP_Error( 'term_meta_update_failed', __( 'WordPress could not update the requested metadata key.', 'wp-native-builder-bridge' ) );
@@ -381,7 +375,7 @@ final class Term_Meta_Store {
 			return new WP_Error( 'term_meta_permission_denied', __( 'The current WordPress user is not allowed to perform this metadata operation.', 'wp-native-builder-bridge' ) );
 		}
 
-		$result = $this->exact_delete_raw_row( $meta_id, (int) $term_id, (string) $key, $row['raw_value'] );
+		$result = $this->exact_delete_raw_row( $meta_id, (int) $term_id, (string) $key, $row['raw_value'], $row );
 		if ( false === $result ) {
 			wp_cache_delete( (int) $term_id, 'term_meta' );
 			return new WP_Error( 'term_meta_delete_failed', __( 'WordPress could not delete the requested metadata key.', 'wp-native-builder-bridge' ) );
@@ -421,21 +415,11 @@ final class Term_Meta_Store {
 		if ( ! $this->target_matches( $row ) ) {
 			return false;
 		}
-		global $wpdb;
 		do_action( 'add_term_meta', (int) $row['term_id'], (string) $row['key'], $row['value'] );
 		if ( ! $this->target_matches( $row ) ) {
 			return false;
 		}
-		$result = $wpdb->insert(
-			$wpdb->termmeta,
-			array(
-				'meta_id'    => (int) $row['meta_id'],
-				'term_id'    => (int) $row['term_id'],
-				'meta_key'   => (string) $row['key'],
-				'meta_value' => $row['raw_value'],
-			),
-			array( '%d', '%d', '%s', '%s' )
-		);
+		$result = $this->insert_raw_row( $row );
 		if ( 1 !== $result ) {
 			wp_cache_delete( (int) $row['term_id'], 'term_meta' );
 			return false;
@@ -464,7 +448,7 @@ final class Term_Meta_Store {
 			return false;
 		}
 
-		$result = $this->exact_update_raw_row( $meta_id, (int) $row['term_id'], (string) $row['key'], $expected_new_raw, $row['raw_value'] );
+		$result = $this->exact_update_raw_row( $meta_id, (int) $row['term_id'], (string) $row['key'], $expected_new_raw, $row['raw_value'], $row );
 		if ( 1 !== $result ) {
 			wp_cache_delete( (int) $row['term_id'], 'term_meta' );
 			return false;
@@ -491,7 +475,7 @@ final class Term_Meta_Store {
 			return new WP_Error( 'term_meta_compensation_failed', __( 'Concurrent metadata changed during mutation and the Bridge could not restore its exact physical row safely.', 'wp-native-builder-bridge' ) );
 		}
 
-		$result = $this->exact_delete_raw_row( $meta_id, (int) $row['term_id'], (string) $row['key'], $row['raw_value'] );
+		$result = $this->exact_delete_raw_row( $meta_id, (int) $row['term_id'], (string) $row['key'], $row['raw_value'], $row, true );
 		if ( false === $result ) {
 			wp_cache_delete( (int) $row['term_id'], 'term_meta' );
 			return new WP_Error( 'term_meta_compensation_failed', __( 'Concurrent metadata changed during mutation and the Bridge could not restore its exact physical row safely.', 'wp-native-builder-bridge' ) );
@@ -517,9 +501,7 @@ final class Term_Meta_Store {
 	 * @return bool
 	 */
 	private function target_matches( array $row, $allow_missing = false ) {
-		if ( ! isset( $row['target_taxonomy'], $row['target_term_taxonomy_id'] )
-			|| ! is_string( $row['target_taxonomy'] ) || '' === $row['target_taxonomy']
-			|| ! is_int( $row['target_term_taxonomy_id'] ) || $row['target_term_taxonomy_id'] < 1 ) {
+		if ( ! $this->valid_target_identity( $row ) ) {
 			return false;
 		}
 		$term_id = (int) $row['term_id'];
@@ -579,111 +561,214 @@ final class Term_Meta_Store {
 	}
 
 	/**
-	 * Performs one fixed-schema byte-exact row update.
+	 * Validates the internal scalar identity carried from the authorized term.
 	 *
-	 * Every branch contains a complete literal query template so neither the caller nor
-	 * an internal string fragment can select SQL structure. SQL NULL is represented by
-	 * the two branches that use SET ... NULL or ... IS NULL rather than a text value.
+	 * @param array<string,mixed> $target Original target snapshot, never public input.
+	 * @return bool
+	 */
+	private function valid_target_identity( array $target ) {
+		return isset( $target['target_taxonomy'], $target['target_term_taxonomy_id'] )
+			&& is_string( $target['target_taxonomy'] ) && '' !== $target['target_taxonomy']
+			&& is_int( $target['target_term_taxonomy_id'] ) && $target['target_term_taxonomy_id'] > 0;
+	}
+
+	/**
+	 * Inserts one row only while its original live unshared term identity exists.
 	 *
-	 * @param int         $meta_id      Physical meta ID.
-	 * @param int         $term_id      Term ID.
-	 * @param string      $key          Exact key.
-	 * @param string|null $expected_raw Expected old raw storage.
-	 * @param string|null $new_raw      New raw storage.
+	 * NULLIF maps only the internal new-row ID zero to AUTO_INCREMENT; restoration
+	 * retains its original positive ID and cannot overwrite a different row owner.
+	 * The locking source read is explicit, including under READ COMMITTED. No
+	 * application transaction, query rewrite, or caller-selected SQL is introduced.
+	 *
+	 * @param array<string,mixed> $row Metadata and original scalar target identity.
 	 * @return int|false
 	 */
-	private function exact_update_raw_row( $meta_id, $term_id, $key, $expected_raw, $new_raw ) {
+	private function insert_raw_row( array $row ) {
 		global $wpdb;
-
-		if ( null === $expected_raw && null === $new_raw ) {
-			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- Fixed-purpose byte-exact wp_termmeta CAS.
+		if ( ! $this->valid_target_identity( $row ) ) {
+			return false;
+		}
+		if ( null === $row['raw_value'] ) {
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- Fixed termmeta write with current native identity predicates.
 			return $wpdb->query(
 				$wpdb->prepare(
-					'UPDATE %i SET meta_value = NULL WHERE meta_id = %d AND term_id = %d AND CAST(meta_key AS BINARY) = CAST(%s AS BINARY) AND meta_value IS NULL',
+					'INSERT INTO %i (meta_id, term_id, meta_key, meta_value) SELECT NULLIF(%d, 0), tt.term_id, %s, NULL FROM %i AS tt INNER JOIN %i AS t ON t.term_id = tt.term_id LEFT JOIN %i AS other_tt ON other_tt.term_id = tt.term_id AND other_tt.term_taxonomy_id <> tt.term_taxonomy_id WHERE tt.term_id = %d AND tt.term_taxonomy_id = %d AND CAST(tt.taxonomy AS BINARY) = CAST(%s AS BINARY) AND other_tt.term_taxonomy_id IS NULL LOCK IN SHARE MODE',
 					$wpdb->termmeta,
-					(int) $meta_id,
-					(int) $term_id,
-					(string) $key
+					(int) $row['meta_id'],
+					(string) $row['key'],
+					$wpdb->term_taxonomy,
+					$wpdb->terms,
+					$wpdb->term_taxonomy,
+					(int) $row['term_id'],
+					$row['target_term_taxonomy_id'],
+					$row['target_taxonomy']
 				)
 			);
 		}
 
-		if ( null === $expected_raw ) {
-			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- Fixed-purpose byte-exact wp_termmeta CAS.
-			return $wpdb->query(
-				$wpdb->prepare(
-					'UPDATE %i SET meta_value = %s WHERE meta_id = %d AND term_id = %d AND CAST(meta_key AS BINARY) = CAST(%s AS BINARY) AND meta_value IS NULL',
-					$wpdb->termmeta,
-					$new_raw,
-					(int) $meta_id,
-					(int) $term_id,
-					(string) $key
-				)
-			);
-		}
-
-		if ( null === $new_raw ) {
-			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- Fixed-purpose byte-exact wp_termmeta CAS.
-			return $wpdb->query(
-				$wpdb->prepare(
-					'UPDATE %i SET meta_value = NULL WHERE meta_id = %d AND term_id = %d AND CAST(meta_key AS BINARY) = CAST(%s AS BINARY) AND CAST(meta_value AS BINARY) = CAST(%s AS BINARY)',
-					$wpdb->termmeta,
-					(int) $meta_id,
-					(int) $term_id,
-					(string) $key,
-					$expected_raw
-				)
-			);
-		}
-
-		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- Fixed-purpose byte-exact wp_termmeta CAS.
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- Fixed termmeta write with current native identity predicates.
 		return $wpdb->query(
 			$wpdb->prepare(
-				'UPDATE %i SET meta_value = %s WHERE meta_id = %d AND term_id = %d AND CAST(meta_key AS BINARY) = CAST(%s AS BINARY) AND CAST(meta_value AS BINARY) = CAST(%s AS BINARY)',
+				'INSERT INTO %i (meta_id, term_id, meta_key, meta_value) SELECT NULLIF(%d, 0), tt.term_id, %s, %s FROM %i AS tt INNER JOIN %i AS t ON t.term_id = tt.term_id LEFT JOIN %i AS other_tt ON other_tt.term_id = tt.term_id AND other_tt.term_taxonomy_id <> tt.term_taxonomy_id WHERE tt.term_id = %d AND tt.term_taxonomy_id = %d AND CAST(tt.taxonomy AS BINARY) = CAST(%s AS BINARY) AND other_tt.term_taxonomy_id IS NULL LOCK IN SHARE MODE',
 				$wpdb->termmeta,
-				$new_raw,
-				(int) $meta_id,
-				(int) $term_id,
-				(string) $key,
-				$expected_raw
+				(int) $row['meta_id'],
+				(string) $row['key'],
+				$row['raw_value'],
+				$wpdb->term_taxonomy,
+				$wpdb->terms,
+				$wpdb->term_taxonomy,
+				(int) $row['term_id'],
+				$row['target_term_taxonomy_id'],
+				$row['target_taxonomy']
 			)
 		);
 	}
 
 	/**
-	 * Performs one fixed-schema byte-exact row delete.
+	 * Updates only an exact metadata row joined to the originally authorized term.
 	 *
-	 * @param int         $meta_id      Physical meta ID.
-	 * @param int         $term_id      Term ID.
-	 * @param string      $key          Exact key.
-	 * @param string|null $expected_raw Expected raw storage.
+	 * @param int                 $meta_id      Physical meta ID.
+	 * @param int                 $term_id      Term ID.
+	 * @param string              $key          Exact key.
+	 * @param string|null         $expected_raw Expected old storage bytes.
+	 * @param string|null         $new_raw      New storage bytes.
+	 * @param array<string,mixed> $target       Original scalar target identity.
 	 * @return int|false
 	 */
-	private function exact_delete_raw_row( $meta_id, $term_id, $key, $expected_raw ) {
+	private function exact_update_raw_row( $meta_id, $term_id, $key, $expected_raw, $new_raw, array $target ) {
 		global $wpdb;
-
-		if ( null === $expected_raw ) {
-			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- Fixed-purpose byte-exact wp_termmeta CAS.
+		if ( ! $this->valid_target_identity( $target ) ) {
+			return false;
+		}
+		if ( null === $expected_raw && null === $new_raw ) {
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- Fixed termmeta write with current native identity predicates.
 			return $wpdb->query(
 				$wpdb->prepare(
-					'DELETE FROM %i WHERE meta_id = %d AND term_id = %d AND CAST(meta_key AS BINARY) = CAST(%s AS BINARY) AND meta_value IS NULL',
+					'UPDATE %i AS m INNER JOIN %i AS tt ON tt.term_id = m.term_id INNER JOIN %i AS t ON t.term_id = m.term_id LEFT JOIN %i AS other_tt ON other_tt.term_id = m.term_id AND other_tt.term_taxonomy_id <> tt.term_taxonomy_id SET m.meta_value = NULL WHERE m.meta_id = %d AND m.term_id = %d AND CAST(m.meta_key AS BINARY) = CAST(%s AS BINARY) AND m.meta_value IS NULL AND tt.term_taxonomy_id = %d AND CAST(tt.taxonomy AS BINARY) = CAST(%s AS BINARY) AND other_tt.term_taxonomy_id IS NULL',
 					$wpdb->termmeta,
+					$wpdb->term_taxonomy,
+					$wpdb->terms,
+					$wpdb->term_taxonomy,
 					(int) $meta_id,
 					(int) $term_id,
-					(string) $key
+					(string) $key,
+					$target['target_term_taxonomy_id'],
+					$target['target_taxonomy']
 				)
 			);
 		}
 
-		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- Fixed-purpose byte-exact wp_termmeta CAS.
+		if ( null === $expected_raw ) {
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- Fixed termmeta write with current native identity predicates.
+			return $wpdb->query(
+				$wpdb->prepare(
+					'UPDATE %i AS m INNER JOIN %i AS tt ON tt.term_id = m.term_id INNER JOIN %i AS t ON t.term_id = m.term_id LEFT JOIN %i AS other_tt ON other_tt.term_id = m.term_id AND other_tt.term_taxonomy_id <> tt.term_taxonomy_id SET m.meta_value = %s WHERE m.meta_id = %d AND m.term_id = %d AND CAST(m.meta_key AS BINARY) = CAST(%s AS BINARY) AND m.meta_value IS NULL AND tt.term_taxonomy_id = %d AND CAST(tt.taxonomy AS BINARY) = CAST(%s AS BINARY) AND other_tt.term_taxonomy_id IS NULL',
+					$wpdb->termmeta,
+					$wpdb->term_taxonomy,
+					$wpdb->terms,
+					$wpdb->term_taxonomy,
+					$new_raw,
+					(int) $meta_id,
+					(int) $term_id,
+					(string) $key,
+					$target['target_term_taxonomy_id'],
+					$target['target_taxonomy']
+				)
+			);
+		}
+
+		if ( null === $new_raw ) {
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- Fixed termmeta write with current native identity predicates.
+			return $wpdb->query(
+				$wpdb->prepare(
+					'UPDATE %i AS m INNER JOIN %i AS tt ON tt.term_id = m.term_id INNER JOIN %i AS t ON t.term_id = m.term_id LEFT JOIN %i AS other_tt ON other_tt.term_id = m.term_id AND other_tt.term_taxonomy_id <> tt.term_taxonomy_id SET m.meta_value = NULL WHERE m.meta_id = %d AND m.term_id = %d AND CAST(m.meta_key AS BINARY) = CAST(%s AS BINARY) AND CAST(m.meta_value AS BINARY) = CAST(%s AS BINARY) AND tt.term_taxonomy_id = %d AND CAST(tt.taxonomy AS BINARY) = CAST(%s AS BINARY) AND other_tt.term_taxonomy_id IS NULL',
+					$wpdb->termmeta,
+					$wpdb->term_taxonomy,
+					$wpdb->terms,
+					$wpdb->term_taxonomy,
+					(int) $meta_id,
+					(int) $term_id,
+					(string) $key,
+					$expected_raw,
+					$target['target_term_taxonomy_id'],
+					$target['target_taxonomy']
+				)
+			);
+		}
+
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- Fixed termmeta write with current native identity predicates.
 		return $wpdb->query(
 			$wpdb->prepare(
-				'DELETE FROM %i WHERE meta_id = %d AND term_id = %d AND CAST(meta_key AS BINARY) = CAST(%s AS BINARY) AND CAST(meta_value AS BINARY) = CAST(%s AS BINARY)',
+				'UPDATE %i AS m INNER JOIN %i AS tt ON tt.term_id = m.term_id INNER JOIN %i AS t ON t.term_id = m.term_id LEFT JOIN %i AS other_tt ON other_tt.term_id = m.term_id AND other_tt.term_taxonomy_id <> tt.term_taxonomy_id SET m.meta_value = %s WHERE m.meta_id = %d AND m.term_id = %d AND CAST(m.meta_key AS BINARY) = CAST(%s AS BINARY) AND CAST(m.meta_value AS BINARY) = CAST(%s AS BINARY) AND tt.term_taxonomy_id = %d AND CAST(tt.taxonomy AS BINARY) = CAST(%s AS BINARY) AND other_tt.term_taxonomy_id IS NULL',
 				$wpdb->termmeta,
+				$wpdb->term_taxonomy,
+				$wpdb->terms,
+				$wpdb->term_taxonomy,
+				$new_raw,
 				(int) $meta_id,
 				(int) $term_id,
 				(string) $key,
-				$expected_raw
+				$expected_raw,
+				$target['target_term_taxonomy_id'],
+				$target['target_taxonomy']
+			)
+		);
+	}
+
+	/**
+	 * Deletes an exact row only at its original live identity or an owned orphan.
+	 *
+	 * The missing-target alternative is internal to create compensation. Both native
+	 * term and taxonomy rows must be absent; a transferred or shared live target never
+	 * qualifies. All conditions are evaluated by the same physical DELETE statement.
+	 *
+	 * @param int                 $meta_id      Physical meta ID.
+	 * @param int                 $term_id      Term ID.
+	 * @param string              $key          Exact key.
+	 * @param string|null         $expected_raw Expected storage bytes.
+	 * @param array<string,mixed> $target       Original scalar target identity.
+	 * @param bool                $allow_missing Remove only this invocation's orphan.
+	 * @return int|false
+	 */
+	private function exact_delete_raw_row( $meta_id, $term_id, $key, $expected_raw, array $target, $allow_missing = false ) {
+		global $wpdb;
+		if ( ! $this->valid_target_identity( $target ) ) {
+			return false;
+		}
+		if ( null === $expected_raw ) {
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- Fixed termmeta write with current native identity predicates.
+			return $wpdb->query(
+				$wpdb->prepare(
+					'DELETE m FROM %i AS m LEFT JOIN %i AS tt ON tt.term_id = m.term_id LEFT JOIN %i AS t ON t.term_id = m.term_id LEFT JOIN %i AS other_tt ON other_tt.term_id = m.term_id AND other_tt.term_taxonomy_id <> tt.term_taxonomy_id WHERE m.meta_id = %d AND m.term_id = %d AND CAST(m.meta_key AS BINARY) = CAST(%s AS BINARY) AND m.meta_value IS NULL AND ( ( tt.term_taxonomy_id = %d AND CAST(tt.taxonomy AS BINARY) = CAST(%s AS BINARY) AND other_tt.term_taxonomy_id IS NULL AND t.term_id IS NOT NULL ) OR ( %d = 1 AND tt.term_taxonomy_id IS NULL AND t.term_id IS NULL ) )',
+					$wpdb->termmeta,
+					$wpdb->term_taxonomy,
+					$wpdb->terms,
+					$wpdb->term_taxonomy,
+					(int) $meta_id,
+					(int) $term_id,
+					(string) $key,
+					$target['target_term_taxonomy_id'],
+					$target['target_taxonomy'],
+					(int) $allow_missing
+				)
+			);
+		}
+
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- Fixed termmeta write with current native identity predicates.
+		return $wpdb->query(
+			$wpdb->prepare(
+				'DELETE m FROM %i AS m LEFT JOIN %i AS tt ON tt.term_id = m.term_id LEFT JOIN %i AS t ON t.term_id = m.term_id LEFT JOIN %i AS other_tt ON other_tt.term_id = m.term_id AND other_tt.term_taxonomy_id <> tt.term_taxonomy_id WHERE m.meta_id = %d AND m.term_id = %d AND CAST(m.meta_key AS BINARY) = CAST(%s AS BINARY) AND CAST(m.meta_value AS BINARY) = CAST(%s AS BINARY) AND ( ( tt.term_taxonomy_id = %d AND CAST(tt.taxonomy AS BINARY) = CAST(%s AS BINARY) AND other_tt.term_taxonomy_id IS NULL AND t.term_id IS NOT NULL ) OR ( %d = 1 AND tt.term_taxonomy_id IS NULL AND t.term_id IS NULL ) )',
+				$wpdb->termmeta,
+				$wpdb->term_taxonomy,
+				$wpdb->terms,
+				$wpdb->term_taxonomy,
+				(int) $meta_id,
+				(int) $term_id,
+				(string) $key,
+				$expected_raw,
+				$target['target_term_taxonomy_id'],
+				$target['target_taxonomy'],
+				(int) $allow_missing
 			)
 		);
 	}
