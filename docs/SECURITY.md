@@ -23,6 +23,7 @@ OAuth never enables a Bridge access group and never grants a WordPress capabilit
 - **Site Configuration** — bounded global configuration.
 - **Advanced Metadata** — protected/private post and term metadata for exact WordPress objects the connected user may edit; disabled by default and intentionally separate from ordinary Site Read/Builder Write access.
 - **Code & Extensions** — managed snippets and extension lifecycle.
+- **Source Editing** — separately enabled installed plugin/theme source read/preview/apply/recovery; executable PHP is administrator-level code trust, not a sandbox.
 - **Users & Destructive** — user administration and destructive operations. Generic post-meta and term-meta deletion require this group in addition to Advanced Metadata.
 
 Only Site Read is enabled by default.
@@ -112,6 +113,19 @@ This contract does not make imports transactional or retries idempotent. A proce
 Plugin/theme installation accepts WordPress.org slugs resolved through WordPress Core APIs. Arbitrary package URLs, uploaded plugin ZIPs, PHP files, and caller-selected server paths are not accepted.
 
 Deletion requires destructive access in addition to the action-specific WordPress capability. Active extensions are protected where deletion would be unsafe.
+
+
+## Installed source editing
+
+Source Editing is a separate default-off trust boundary. Enabling `Code & Extensions` does not grant it on either a fresh install or upgrade. Every operation rechecks both Bridge groups, WordPress file-modification policy, and the matching native `edit_plugins`/`edit_themes` capability. `DISALLOW_FILE_EDIT`, `DISALLOW_FILE_MODS`, multisite/Super Admin rules, and target writeability therefore remain authoritative denials rather than settings the Bridge bypasses.
+
+The caller never supplies an OS path. Installed plugin/theme identity and one relative file are resolved from Core editable inventories, then canonicalized. The final real path must stay inside the exact installed extension root; traversal, symlink escape, target switching, and arbitrary server/configuration paths fail closed. The production implementation exposes one fixed-purpose `WP_Filesystem_Direct` writer only after confinement and exact-state checks; it does not expose filesystem credentials or a generic filesystem API.
+
+PHP candidates pass `TOKEN_PARSE` before any write. Preview binds the exact target, preimage SHA-256, candidate SHA-256, and candidate identity. Apply re-resolves the target after a cooperative lock, rechecks the preimage, persists one bounded private recovery record, writes, re-reads, and verifies exact bytes. Active PHP then performs Core-compatible scrape validation through ordinary WordPress boot without synthetic admin authentication. Network-active failures that occur before scraper registration are treated as validation failures rather than success.
+
+Recovery can restore only when current bytes still equal the exact candidate owned by the pending record. If current bytes differ, Bridge reports a conflict and preserves newer state. Failed or unverifiable compensation retains the private record and reports recovery-required/uncertain state; it never claims a transaction or promises to undo arbitrary PHP side effects that already executed. Source/preimage payloads and full diffs are excluded from the ordinary mutation log.
+
+This boundary grants code trust when explicitly enabled: PHP written into an installed extension runs with the authority available to that WordPress runtime. It is not isolation, evaluation sandboxing, OS-root access, or a generic PHP execution endpoint.
 
 ## Managed code snippets
 

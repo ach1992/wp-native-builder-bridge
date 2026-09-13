@@ -60,6 +60,7 @@ for test in \
     issue36-term-meta-security-smoke.php \
     issue36-primary-identity-smoke.php \
     issue42-ability-catalog-smoke.php \
+    issue46-source-editing-smoke.php \
     issue3-content-block-smoke.php \
     issue3-safety-regressions.php \
     issue3-provider-smoke.php \
@@ -82,6 +83,18 @@ do
         "${compose[@]}" exec -T wordpress rm -f /var/www/html/wp-content/mu-plugins/wpnb-catalog-contract.php
     fi
 done
+
+echo "== Issue #46 web-user direct filesystem denial =="
+wp_web=("${compose[@]}" run --rm --user 33:33 -e WP_CLI_CACHE_DIR=/tmp/wp-cli-cache cli)
+"${wp_web[@]}" eval-file wp-content/plugins/wp-native-builder-bridge/tests/integration/issue46-filesystem-denial-smoke.php --user=1
+
+echo "== Issue #46 deployment policy constants =="
+"${wp[@]}" config set DISALLOW_FILE_EDIT true --raw --allow-root >/dev/null
+"${wp[@]}" eval-file wp-content/plugins/wp-native-builder-bridge/tests/integration/issue46-policy-smoke.php --user=1 --allow-root
+"${wp[@]}" config delete DISALLOW_FILE_EDIT --allow-root >/dev/null
+"${wp[@]}" config set DISALLOW_FILE_MODS true --raw --allow-root >/dev/null
+"${wp[@]}" eval-file wp-content/plugins/wp-native-builder-bridge/tests/integration/issue46-policy-smoke.php --user=1 --allow-root
+"${wp[@]}" config delete DISALLOW_FILE_MODS --allow-root >/dev/null
 
 # Pretty routing is needed only for the public .well-known OAuth discovery smoke.
 # Configure it after the site-settings regression has completed so the HTTP fixture
@@ -166,6 +179,8 @@ echo "Workspace deactivation preservation: PASS"
 echo "== release uninstall cleanup =="
 "${wp[@]}" option update wp_native_builder_bridge_settings '{"site_read":1}' --format=json --allow-root >/dev/null
 "${wp[@]}" option update wp_native_builder_bridge_recent_actions '[{"ability":"fixture"}]' --format=json --allow-root >/dev/null
+"${wp[@]}" option update wp_native_builder_bridge_source_recovery '{"token":"fixture","preimage":"private-source-fixture"}' --format=json --allow-root >/dev/null
+"${wp[@]}" option update wp_native_builder_bridge_source_lock 'fixture-lock' --allow-root >/dev/null
 "${wp[@]}" option update wp_native_builder_bridge_oauth_instance '0123456789abcdef0123456789abcdef' --allow-root >/dev/null
 "${wp[@]}" transient set wpnb_oauth_chatgpt_cimd_ok 1 900 --allow-root >/dev/null
 "${wp[@]}" transient set wpnb_oauth_chatgpt_jwks '[{"kid":"fixture"}]' 900 --allow-root >/dev/null
@@ -179,6 +194,14 @@ if "${wp[@]}" option get wp_native_builder_bridge_settings --allow-root >/dev/nu
 fi
 if "${wp[@]}" option get wp_native_builder_bridge_recent_actions --allow-root >/dev/null 2>&1; then
     echo "ERROR: mutation-log option survived plugin uninstall." >&2
+    exit 1
+fi
+if "${wp[@]}" option get wp_native_builder_bridge_source_recovery --allow-root >/dev/null 2>&1; then
+    echo "ERROR: source recovery material survived plugin uninstall." >&2
+    exit 1
+fi
+if "${wp[@]}" option get wp_native_builder_bridge_source_lock --allow-root >/dev/null 2>&1; then
+    echo "ERROR: source editing lock survived plugin uninstall." >&2
     exit 1
 fi
 if "${wp[@]}" option get wp_native_builder_bridge_oauth_instance --allow-root >/dev/null 2>&1; then
