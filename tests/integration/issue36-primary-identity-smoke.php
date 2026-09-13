@@ -7,6 +7,9 @@
 use WP_Native_Builder_Bridge\Support\Settings;
 use WP_Native_Builder_Bridge\Support\Mutation_Log;
 
+// WP-CLI eval-file has local scope; explicitly import the native database handle.
+global $wpdb;
+
 $checks = 0;
 $failures = array();
 $ok = static function ( $condition, $message ) use ( &$checks, &$failures ) { ++$checks; if ( ! $condition ) { $failures[] = $message; } };
