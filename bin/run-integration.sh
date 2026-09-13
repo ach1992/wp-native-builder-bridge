@@ -57,6 +57,7 @@ for test in \
     foundation-smoke.php \
     issue34-post-meta-security-smoke.php \
     issue36-term-meta-security-smoke.php \
+    issue42-ability-catalog-smoke.php \
     issue3-content-block-smoke.php \
     issue3-safety-regressions.php \
     issue3-provider-smoke.php \
@@ -70,7 +71,14 @@ for test in \
     issue8-workspace-smoke.php
 do
     echo "== ${test} =="
+    if [[ "$test" == "issue42-ability-catalog-smoke.php" ]]; then
+        "${compose[@]}" exec -T wordpress mkdir -p /var/www/html/wp-content/mu-plugins
+        "${compose[@]}" cp "$root/tests/fixtures/ability-catalog-contract.php" wordpress:/var/www/html/wp-content/mu-plugins/wpnb-catalog-contract.php
+    fi
     "${wp[@]}" eval-file "wp-content/plugins/wp-native-builder-bridge/tests/integration/${test}" --user=1 --allow-root
+    if [[ "$test" == "issue42-ability-catalog-smoke.php" ]]; then
+        "${compose[@]}" exec -T wordpress rm -f /var/www/html/wp-content/mu-plugins/wpnb-catalog-contract.php
+    fi
 done
 
 # Pretty routing is needed only for the public .well-known OAuth discovery smoke.

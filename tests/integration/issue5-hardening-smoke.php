@@ -71,11 +71,13 @@ try {
 		}
 	}
 	sort( $names );
-	wpnb_issue5_assert( 36 === count( $names ), 'Baseline Bridge registry must contain exactly 36 abilities without optional provider fallbacks.' );
-	wpnb_issue5_assert( 36 === count( array_unique( $names ) ), 'Bridge ability names are not unique.' );
-	// Issue #36 adds exactly three names; retain the pre-existing 33-ability boundary.
+	wpnb_issue5_assert( 37 === count( $names ), 'Baseline Bridge registry must contain exactly 37 abilities without optional provider fallbacks.' );
+	wpnb_issue5_assert( 37 === count( array_unique( $names ) ), 'Bridge ability names are not unique.' );
+	// Term metadata adds three names to the 34-Ability target including the public catalog.
 	$term_metadata_names = array( 'wp-native-builder/term-meta-read', 'wp-native-builder/term-meta-update', 'wp-native-builder/term-meta-delete' );
-	wpnb_issue5_assert( 3 === count( array_intersect( $names, $term_metadata_names ) ) && 33 === count( array_diff( $names, $term_metadata_names ) ), 'Registry changed outside the three Issue #36 term metadata abilities.' );
+	wpnb_issue5_assert( 3 === count( array_intersect( $names, $term_metadata_names ) ) && 34 === count( array_diff( $names, $term_metadata_names ) ), 'Registry changed outside the three term metadata abilities.' );
+	wpnb_issue5_assert( in_array( 'wp-native-builder/abilities-read', $names, true ), 'Integrated public Ability catalog is missing.' );
+	wpnb_issue5_assert( 33 === count( array_diff( $names, array_merge( $term_metadata_names, array( 'wp-native-builder/abilities-read' ) ) ) ), 'The pre-existing 33-Ability boundary changed unexpectedly.' );
 
 	$defaults = $settings->defaults();
 	wpnb_issue5_assert( 1 === $defaults[ Settings::GROUP_SITE_READ ], 'Site Read is not the sole enabled default group.' );

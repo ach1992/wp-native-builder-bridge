@@ -106,11 +106,15 @@ final class Ability_Resolver {
 			return false;
 		}
 
-		if ( isset( $meta['mcp'] ) && is_array( $meta['mcp'] ) && array_key_exists( 'public', $meta['mcp'] ) && null !== $meta['mcp']['public'] ) {
-			return (bool) $meta['mcp']['public'];
+		$mcp_meta = $meta['mcp'] ?? array();
+		if ( ! is_array( $mcp_meta ) ) {
+			return false;
+		}
+		if ( isset( $mcp_meta['public'] ) ) {
+			return (bool) $mcp_meta['public'];
 		}
 
-		return ! empty( $meta['public'] );
+		return true === ( $meta['public'] ?? false );
 	}
 
 	/**
