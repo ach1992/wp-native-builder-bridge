@@ -76,3 +76,14 @@ docs/maintainer/ recovery map and preserved design references
 Do not force-move a published version tag. Use a patch release for post-publication plugin-package changes.
 
 Repository-only documentation/maintainer updates do not require a plugin version bump unless they change the shipped plugin package or published product contract.
+
+## Generic term metadata validation
+
+`composer test` includes `tests/issue36-term-meta.php` for bounded schemas/physical reads, target and group gates, shared secret policy, JSON/opaque-value refusal and stale-state failures. The actual WordPress capability/filter and persistence behavior is exercised by `tests/integration/issue36-term-meta-security-smoke.php` in **both** existing integration lanes. The fixture uses Core categories/tags and a private custom taxonomy with a dedicated edit capability, without an external provider plugin.
+
+Keep the Issue #34 regression/integration tests unchanged. The new tests cover explicit/provider/mapped authorization, shared term identity, physical defaults/virtual reads, exact-byte CAS, duplicate contention, original-invocation creation ownership, compensation lifecycle/cache state, SQL NULL/scalar/slashing behavior, sanitizer pass count, authority/target races (including taxonomy or term-taxonomy identity changes before and during all three compensation pre-hooks) and log redaction. `bin/static-safety-check.sh` confines the term store separately; adding another database surface requires explicit architectural review, not an exclusion from the check.
+
+
+The primary-write regression `tests/integration/issue36-primary-identity-smoke.php` runs in both native lanes. Its isolated `query` observer returns SQL unchanged and moves only a fixture term immediately before the pending physical mutation, after the last PHP guard. It covers taxonomy and term-taxonomy-ID transfers for creation, update and deletion, including NULL/string branches; it checks that every boundary was actually reached, the transferred target is real, the result is an error, and all physical metadata bytes are unchanged. Keep the separate 12 before/during-compensation transfer tests intact. This deterministic timing test is not a separate multi-session database-lock lifetime test.
+
+The term store's identity joins may read only native `terms`/`term_taxonomy` while writing only termmeta. `bin/check-term-meta-confinement.php` pins the complete literal SQL and every bound argument, including table identity and the original authorized taxonomy/term-taxonomy snapshot. Tests mutate these source tokens without executing the malformed samples. Do not regenerate expectations merely to approve an unreviewed query change, or relax the independently shipped post-meta checks.

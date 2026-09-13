@@ -56,6 +56,8 @@ echo "Integration baseline: WordPress ${actual_wp}; PHP ${actual_php}; image ${w
 for test in \
     foundation-smoke.php \
     issue34-post-meta-security-smoke.php \
+    issue36-term-meta-security-smoke.php \
+    issue36-primary-identity-smoke.php \
     issue42-ability-catalog-smoke.php \
     issue3-content-block-smoke.php \
     issue3-safety-regressions.php \

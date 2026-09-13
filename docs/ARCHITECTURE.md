@@ -26,7 +26,7 @@ AI / MCP client
 | Paginated public contract inspection | `src/Abilities/class-ability-catalog-abilities.php` | Read-only list/detail; no operation or target permission callback is invoked. |
 | Bridge delegation settings | `src/Support/class-settings.php`, `class-permissions.php` | Small default-off groups plus actual WordPress authority, checked at execution. |
 | Typed administration | Existing providers under `src/Abilities/` | Object-specific inputs, capabilities, lifecycle, error and integrity behavior. |
-| Exact metadata persistence | `src/Support/class-post-meta-store.php` | Fixed-purpose, fixed-schema row identity/CAS; not a generic database API. |
+| Exact metadata persistence | `src/Support/class-post-meta-store.php`, `class-term-meta-store.php` | Fixed-purpose, fixed-schema row identity/CAS; not a generic database API. |
 | Persistent Workspace | `src/Workspace/class-store.php`, Workspace abilities and admin screens | Private native storage, version/hash concurrency, dedicated administration. |
 | Activity | `src/Support/class-mutation-log.php` | Bounded identity/outcome metadata, never request bodies or secrets. |
 
@@ -64,7 +64,7 @@ This table is a code-backed capability inventory, not a roadmap schedule or a li
 | Content and revisions | `class-content-abilities.php`, `class-content-eligibility.php` | Administration of objects with different private/internal lifecycles must use appropriate contracts rather than widening ordinary authoring blindly. |
 | Blocks and appearance | `class-block-abilities.php`, `class-navigation-abilities.php`; compatible theme/provider Abilities | Generic widget/template/style administration and authoritative editor-serialization or staged-theme workflows where upstream supports them. PHP parse/serialize is not editor validation. |
 | Media | `class-media-abilities.php`: inspection, Base64 upload, metadata update and deletion | Explicit URL import and additional validated file workflows; do not confuse a missing URL operation with a disabled permission. |
-| Taxonomies and metadata | `class-taxonomy-abilities.php`; generic `post-meta-*` with protected-key opt-in and physical-state integrity | Exact-taxonomy generic term metadata; user/comment metadata with distinct authorization. No provider/key allowlists. |
+| Taxonomies and metadata | `class-taxonomy-abilities.php`; generic `post-meta-*` and exact-taxonomy `term-meta-*` with protected-key opt-in and physical-state integrity | User/comment metadata with distinct authorization. No provider/key allowlists. |
 | Configuration | `class-site-config-abilities.php`: bounded site-setting fields; compatible provider Abilities | Broader registered site/network/theme/provider settings and explicit semantics for unregistered settings. The current field list is not a permanent product policy. |
 | Extensions and source | `class-extension-abilities.php`: installed inventory and WordPress.org lifecycle; optional managed snippets | Separately consented uploaded/URL package sources and installed plugin/theme source read/preview/apply/recovery. |
 | Users and access | `class-user-abilities.php`: bounded users/roles, account upsert/removal | Wider role/capability, membership, session and authentication lifecycle with real delegable authority; no generic secret dumping. |
@@ -78,7 +78,7 @@ This table is a code-backed capability inventory, not a roadmap schedule or a li
 
 Use the operation's owning API, not a generic storage write that bypasses business validation. Registered metadata authorization and additional mapped capabilities remain authoritative. The protected-unregistered metadata opt-in is deliberately narrow: exact target authority, enabled Advanced Metadata, no explicit provider denial, no credential-like key, and lossless single-row state.
 
-Existing post metadata updates/deletes use exact physical-row identity and byte-exact conditional persistence. Compensate only the current invocation's own unchanged row; never overwrite newer state to manufacture success. Share policy code where semantics are identical, but keep object-specific authority and lifecycle separate when extending terms, users or comments.
+Existing post and term metadata updates/deletes use exact physical-row identity and byte-exact conditional persistence. Term authority additionally binds the original real term, taxonomy and term-taxonomy row inside every primary/compensating write. The term store reads native identity tables only through fixed joins; its only mutation target remains termmeta. Creation preserves the native sanitizer/filter/uniqueness/lifecycle around a conditional insertion instead of rewriting Core queries or adding an application transaction. Compensate only the current invocation's own unchanged row; never overwrite newer state to manufacture success. Share policy code where semantics are identical, but keep object-specific authority and lifecycle separate when extending metadata to users or comments.
 
 For content/blocks/Workspace and future settings/files, use the current-state identity appropriate to overwrite risk. Preserve revisions where native, verify persistence, and describe partial failure/recovery accurately. Workspace internals remain inaccessible through unrelated content/meta operations but manageable through dedicated Workspace contracts.
 

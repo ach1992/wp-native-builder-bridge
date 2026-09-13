@@ -70,6 +70,9 @@ final class Registrar {
 	 */
 	private $post_meta_abilities;
 
+	/** @var Term_Meta_Abilities */
+	private $term_meta_abilities;
+
 	/**
 	 * Gutenberg block provider.
 	 *
@@ -131,6 +134,7 @@ final class Registrar {
 		$this->catalog_abilities       = new Ability_Catalog_Abilities( $this->resolver, $this->permissions );
 		$this->content_abilities       = new Content_Abilities( $this->permissions, $mutation_log );
 		$this->post_meta_abilities     = new Post_Meta_Abilities( $this->permissions, $mutation_log );
+		$this->term_meta_abilities     = new Term_Meta_Abilities( $this->permissions, $mutation_log );
 		$this->block_abilities         = new Block_Abilities( $this->permissions, $mutation_log );
 		$this->media_abilities         = new Media_Abilities( $this->permissions, $mutation_log );
 		$this->taxonomy_abilities      = new Taxonomy_Abilities( $this->permissions, $mutation_log );
@@ -225,6 +229,7 @@ final class Registrar {
 		$this->catalog_abilities->register();
 		$this->content_abilities->register();
 		$this->post_meta_abilities->register();
+		$this->term_meta_abilities->register();
 		$this->block_abilities->register();
 		$this->media_abilities->register();
 		$this->taxonomy_abilities->register();
