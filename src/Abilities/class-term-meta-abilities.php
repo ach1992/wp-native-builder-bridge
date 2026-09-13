@@ -319,7 +319,7 @@ final class Term_Meta_Abilities {
 		$verified_row = $this->store->replace_row(
 			$term->term_id,
 			$key,
-			$rows[0],
+			$this->with_target_identity( $term, $rows[0] ),
 			$prepared_value,
 			function () use ( $term, $key ) {
 				return $this->can_access_meta_key( $term, $key, 'edit' );
@@ -392,7 +392,7 @@ final class Term_Meta_Abilities {
 		$result = $this->store->delete_row(
 			$term->term_id,
 			$key,
-			$rows[0],
+			$this->with_target_identity( $term, $rows[0] ),
 			function () use ( $term, $key ) {
 				return $this->can_access_meta_key( $term, $key, 'delete' );
 			}
@@ -420,7 +420,8 @@ final class Term_Meta_Abilities {
 	 * @return array<string,mixed>|WP_Error
 	 */
 	private function create_value( $term, $key, $value, $current_hash ) {
-		$creation = $this->store->create_unique_row(
+		$target_identity = $this->with_target_identity( $term, array() );
+		$creation        = $this->store->create_unique_row(
 			$term->term_id,
 			$key,
 			$value,
@@ -433,7 +434,7 @@ final class Term_Meta_Abilities {
 		}
 
 		$result       = $creation['result'];
-		$expected_row = $creation['expected_row'];
+		$expected_row = $creation['expected_row'] + $target_identity;
 		$after        = $this->store->rows( $term->term_id, $key );
 		if ( is_wp_error( $after ) ) {
 			if ( is_int( $result ) && $result > 0 && ! empty( $creation['owned'] ) ) {
@@ -478,6 +479,19 @@ final class Term_Meta_Abilities {
 
 		$this->log->record( 'wp-native-builder/term-meta-update', 'term_meta', (int) $term->term_id, true, '' );
 		return $this->item_from_rows( $key, $after, true );
+	}
+
+	/**
+	 * Pins scalar target identity for compensation without extending the public schema.
+	 *
+	 * @param object              $term Authorized term snapshot.
+	 * @param array<string,mixed> $row  Internal row snapshot.
+	 * @return array<string,mixed>
+	 */
+	private function with_target_identity( $term, array $row ) {
+		$row['target_taxonomy']         = (string) $term->taxonomy;
+		$row['target_term_taxonomy_id'] = (int) $term->term_taxonomy_id;
+		return $row;
 	}
 
 	/**

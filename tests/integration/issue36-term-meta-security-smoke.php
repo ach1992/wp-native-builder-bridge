@@ -269,6 +269,59 @@ try {
         $ok( $before !== wp_cache_get_last_changed( 'terms' ), 'Core term query cache generation did not advance.' );
     }
 
+    // Compensation must retain target identity both before and after its pre-hook.
+    foreach ( array( 'create', 'update', 'delete' ) as $operation ) {
+        foreach ( array( 'taxonomy', 'term_taxonomy_id' ) as $drift ) {
+            foreach ( array( 'before_compensation', 'during_compensation' ) as $stage ) {
+                $converted = $require( wp_insert_term( 'Target transfer ' . $operation . $drift . $stage, $taxonomy ), 'Create transfer fixture' );
+                $converted_id = (int) $converted['term_id']; $converted_tt = (int) $converted['term_taxonomy_id'];
+                $replacement_tt = (int) $wpdb->get_var( "SELECT MAX(term_taxonomy_id) FROM {$wpdb->term_taxonomy}" ) + 100;
+                try {
+                    if ( 'create' !== $operation ) { add_term_meta( $converted_id, '_transfer', 'original', true ); }
+                    $t = array( 'term_id' => $converted_id, 'taxonomy' => $taxonomy );
+                    $r = $require( $read->execute( $t + array( 'key' => '_transfer' ) ), 'Inspect transfer fixture' );
+                    $change_target = static function () use ( $converted_id, $converted_tt, $replacement_tt, $taxonomy, $other_taxonomy, $drift ) {
+                        global $wpdb;
+                        $changes = 'taxonomy' === $drift ? array( 'taxonomy' => $other_taxonomy ) : array( 'term_taxonomy_id' => $replacement_tt );
+                        $wpdb->update( $wpdb->term_taxonomy, $changes, array( 'term_taxonomy_id' => $converted_tt ) );
+                        clean_term_cache( $converted_id, $taxonomy ); clean_term_cache( $converted_id, $other_taxonomy );
+                    };
+                    $event = array( 'create' => 'added_term_meta', 'update' => 'updated_term_meta', 'delete' => 'deleted_term_meta' )[ $operation ];
+                    $contend = null;
+                    $contend = $hook( $event, static function ( $ids, $id, $key ) use ( &$contend, $event, $converted_id, $insert_raw, $change_target, $stage ) {
+                        if ( (int) $id !== $converted_id || '_transfer' !== $key ) { return; }
+                        remove_filter( $event, $contend, 1 );
+                        if ( 'before_compensation' === $stage ) { $change_target(); }
+                        $insert_raw( $converted_id, '_transfer', 'new-target-value' );
+                    }, 1, 4 );
+                    if ( 'during_compensation' === $stage ) {
+                        $inverse = array( 'create' => 'delete_term_meta', 'update' => 'update_term_meta', 'delete' => 'add_term_meta' )[ $operation ];
+                        $transfer = null;
+                        $transfer = $hook( $inverse, static function ( ...$args ) use ( &$transfer, $inverse, $operation, $converted_id, $change_target ) {
+                            $id = 'delete' === $operation ? $args[0] : $args[1];
+                            $key = 'delete' === $operation ? $args[1] : $args[2];
+                            $value = 'delete' === $operation ? $args[2] : $args[3];
+                            $expected = 'create' === $operation ? 'bridge' : 'original';
+                            if ( (int) $id !== $converted_id || '_transfer' !== $key || $expected !== $value ) { return; }
+                            remove_filter( $inverse, $transfer, 1 ); $change_target();
+                        }, 1, 4 );
+                    }
+                    $input = $t + array( 'key' => '_transfer', 'expected_state_hash' => $r['items'][0]['state_hash'] );
+                    $result = 'delete' === $operation ? $delete->execute( $input ) : $update->execute( $input + array( 'value_json' => '"bridge"' ) );
+                    $current = get_term( $converted_id );
+                    $ok( $current && ! is_wp_error( $current ) && ( 'taxonomy' === $drift ? $other_taxonomy === $current->taxonomy : $replacement_tt === (int) $current->term_taxonomy_id ), 'Target-transfer fixture did not change the current WordPress identity.' );
+                    $values = array_column( $raw_rows( $converted_id, '_transfer' ), 'meta_value' ); sort( $values );
+                    $expected = 'delete' === $operation ? array( 'new-target-value' ) : array( 'bridge', 'new-target-value' );
+                    $ok( is_wp_error( $result ) && 'term_meta_compensation_failed' === $result->get_error_code() && $expected === $values, 'Compensation crossed a changed target: ' . $operation . '/' . $drift . '/' . $stage );
+                } finally {
+                    $wpdb->update( $wpdb->term_taxonomy, array( 'taxonomy' => $taxonomy, 'term_taxonomy_id' => $converted_tt ), array( 'term_id' => $converted_id ) );
+                    clean_term_cache( $converted_id, $taxonomy ); clean_term_cache( $converted_id, $other_taxonomy );
+                    wp_delete_term( $converted_id, $taxonomy );
+                }
+            }
+        }
+    }
+
     // Core category/tag terms use the same provider-neutral surface for authorized actors.
     wp_set_current_user( $original_user );
     foreach ( array( 'category', 'post_tag' ) as $core_taxonomy ) {

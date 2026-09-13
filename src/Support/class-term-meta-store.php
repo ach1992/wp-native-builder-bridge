@@ -418,14 +418,12 @@ final class Term_Meta_Store {
 	 * @return bool
 	 */
 	public function restore_deleted_row( array $row ) {
-		$term = get_term( (int) $row['term_id'] );
-		if ( ! $term || is_wp_error( $term ) || wp_term_is_shared( (int) $row['term_id'] ) ) {
+		if ( ! $this->target_matches( $row ) ) {
 			return false;
 		}
 		global $wpdb;
 		do_action( 'add_term_meta', (int) $row['term_id'], (string) $row['key'], $row['value'] );
-		$term = get_term( (int) $row['term_id'] );
-		if ( ! $term || is_wp_error( $term ) || wp_term_is_shared( (int) $row['term_id'] ) ) {
+		if ( ! $this->target_matches( $row ) ) {
 			return false;
 		}
 		$result = $wpdb->insert(
@@ -457,8 +455,14 @@ final class Term_Meta_Store {
 	 * @return bool
 	 */
 	public function restore_updated_row( array $row, $expected_new_raw ) {
+		if ( ! $this->target_matches( $row ) ) {
+			return false;
+		}
 		$meta_id = (int) $row['meta_id'];
 		do_action( 'update_term_meta', $meta_id, (int) $row['term_id'], (string) $row['key'], $row['value'] );
+		if ( ! $this->target_matches( $row ) ) {
+			return false;
+		}
 
 		$result = $this->exact_update_raw_row( $meta_id, (int) $row['term_id'], (string) $row['key'], $expected_new_raw, $row['raw_value'] );
 		if ( 1 !== $result ) {
@@ -477,9 +481,15 @@ final class Term_Meta_Store {
 	 * @return true|WP_Error
 	 */
 	public function cleanup_created_row( array $row ) {
+		if ( ! $this->target_matches( $row, true ) ) {
+			return new WP_Error( 'term_meta_compensation_failed', __( 'Concurrent metadata changed during mutation and the Bridge could not restore its exact physical row safely.', 'wp-native-builder-bridge' ) );
+		}
 		$meta_id  = (int) $row['meta_id'];
 		$meta_ids = array( $meta_id );
 		do_action( 'delete_term_meta', $meta_ids, (int) $row['term_id'], (string) $row['key'], $row['value'] );
+		if ( ! $this->target_matches( $row, true ) ) {
+			return new WP_Error( 'term_meta_compensation_failed', __( 'Concurrent metadata changed during mutation and the Bridge could not restore its exact physical row safely.', 'wp-native-builder-bridge' ) );
+		}
 
 		$result = $this->exact_delete_raw_row( $meta_id, (int) $row['term_id'], (string) $row['key'], $row['raw_value'] );
 		if ( false === $result ) {
@@ -494,6 +504,34 @@ final class Term_Meta_Store {
 		wp_cache_delete( (int) $row['term_id'], 'term_meta' );
 		do_action( 'deleted_term_meta', $meta_ids, (int) $row['term_id'], (string) $row['key'], $row['value'] );
 		return true;
+	}
+
+	/**
+	 * Revalidates the original taxonomy and term-taxonomy row before compensation.
+	 * Only cleanup of this invocation's unchanged newly-created orphan may proceed
+	 * after the term disappears; restoration never recreates an orphan. A term ID
+	 * reused or moved to another taxonomy is not the original authorized target.
+	 *
+	 * @param array<string,mixed> $row           Owned row plus internal target snapshot.
+	 * @param bool                $allow_missing Permit removal of an owned create orphan.
+	 * @return bool
+	 */
+	private function target_matches( array $row, $allow_missing = false ) {
+		if ( ! isset( $row['target_taxonomy'], $row['target_term_taxonomy_id'] )
+			|| ! is_string( $row['target_taxonomy'] ) || '' === $row['target_taxonomy']
+			|| ! is_int( $row['target_term_taxonomy_id'] ) || $row['target_term_taxonomy_id'] < 1 ) {
+			return false;
+		}
+		$term_id = (int) $row['term_id'];
+		$term    = get_term( $term_id );
+		if ( ! $term ) {
+			return $allow_missing;
+		}
+		return ! is_wp_error( $term ) && ! wp_term_is_shared( $term_id )
+			&& $term_id === (int) $term->term_id
+			&& $row['target_taxonomy'] === $term->taxonomy
+			&& $row['target_term_taxonomy_id'] === (int) $term->term_taxonomy_id
+			&& get_object_subtype( 'term', $term_id ) === $row['target_taxonomy'];
 	}
 
 	/**
