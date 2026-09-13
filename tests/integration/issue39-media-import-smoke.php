@@ -145,9 +145,11 @@ try {
     remove_filter( 'map_meta_cap', $deny_upload, 10 );
     wpnb39_integration_assert( is_wp_error( $ability->execute( $input + array( 'post_id' => PHP_INT_MAX ) ) ), 'A nonexistent parent permitted import.' );
     wpnb39_integration_assert( 0 === $calls, 'Native authority must be checked before HTTP.' );
-    foreach ( array( 'file:///etc/passwd', 'ftp://wordpress.org/media', 'http://127.0.0.1/media', 'http://169.254.169.254/media', 'https://user:pass@wordpress.org/media' ) as $unsafe ) {
+    wpnb39_integration_assert( true === $ability->check_permissions( $input ), 'Unsafe URL fixture requires its authorized baseline before testing input rejection.' );
+    foreach ( array( 'file:///etc/passwd', 'ftp://wordpress.org/media', 'http://127.0.0.1/media', 'http://169.254.169.254/media', 'https://user:pass@wordpress.org/media' ) as $vector_index => $unsafe ) {
         $denied = $ability->execute( array_replace( $input, array( 'url' => $unsafe ) ) );
-        wpnb39_integration_assert( is_wp_error( $denied ) && 'unsafe_media_import_url' === $denied->get_error_code(), 'Unsafe URL did not fail at the exact preflight boundary.' );
+        $denial_code = is_wp_error( $denied ) ? $denied->get_error_code() : gettype( $denied );
+        wpnb39_integration_assert( is_wp_error( $denied ) && 'unsafe_media_import_url' === $denial_code, sprintf( 'Unsafe URL fixture %d returned %s instead of its preflight error (HTTP entries: %d).', $vector_index, $denial_code, $calls ) );
         wpnb39_integration_assert( 0 === $calls && 0 === $unexpected_calls, 'Unsafe preflight attempted HTTP.' );
         $redirect_denied = false;
         try { WP_Http::validate_redirects( $unsafe ); }
