@@ -38,12 +38,29 @@ The baseline installation registers the core Bridge surfaces below. Optional Gra
 | `site-settings-update` | Site Configuration | Update bounded site settings. |
 | `extensions-read` | Site Read | Read installed plugin/theme metadata. |
 | `extension-lifecycle` | Code & Extensions | WordPress.org install/update/activate/deactivate; deletion is destructive. |
+| `source-files-read` | Code & Extensions + Source Editing | List or read exact installed plugin/theme editable source targets; source payloads require the elevated boundary. |
+| `source-file-preview` | Code & Extensions + Source Editing | Validate and bind an exact candidate to the current target/preimage without writing. |
+| `source-file-apply` | Code & Extensions + Source Editing | Apply one preview-bound candidate with exact persistence verification and recovery ownership. |
+| `source-file-recover` | Code & Extensions + Source Editing | Restore the Bridge-owned exact preimage only while current bytes still match the owned candidate. |
 | `users-read` | Site Read | Read bounded user/role information without credential material. |
 | `user-upsert` | Users & Destructive | Create/update a user and assign an editable role. |
 | `user-remove` | Users & Destructive | Remove a user with explicit reassignment. |
 | `workspace-resume` | Site Read | Return compact durable Workspace orientation. |
 | `workspace-document` | Site Read / Builder Write | List/read/create/update/archive private Workspace documents. |
 | `workspace-task` | Site Read / Builder Write | List/read/create/update/transition/archive private Workspace tasks. |
+
+
+## Installed source editing boundary
+
+`Source Editing` is a separate elevated access group and defaults off on both fresh installs and upgrades. Existing `Code & Extensions` consent never enables it implicitly. Source read, preview, apply, and recovery require both groups plus the current WordPress `edit_plugins` or `edit_themes` authority for the selected installed target. WordPress file-modification policy remains authoritative.
+
+Targets are provider-neutral: callers identify one installed plugin main file or theme stylesheet plus one relative editable file. The Bridge starts from WordPress's editable-file inventory, then adds canonical real-path containment. Traversal, symlink escape, arbitrary OS paths, unrelated configuration files, and target switching are rejected. Ordinary discovery returns identities and bounded state only; source bytes are returned only by the elevated exact-read operation.
+
+Preview parses PHP candidates without executing them and returns an exact preimage hash, candidate hash, and target-bound candidate identity. Apply rechecks all of that state immediately before mutation. The fixed-purpose writer uses direct WordPress filesystem access only for the already-confined target, verifies persisted bytes after the write, invalidates opcode/theme caches as applicable, and never collects FTP/SSH filesystem credentials.
+
+Active PHP additionally uses WordPress's edited-file scrape protocol against normal WordPress boot without fabricating an administrator session or editor nonce. Missing/invalid scrape sentinels fail closed, including network-active plugin failures that can occur before Core registers the scraper. A runtime validation failure restores only the exact Bridge-owned candidate to its exact preimage; newer legitimate bytes are never overwritten. One private bounded recovery record is retained when state cannot be verified safely. Mutation logs contain operation/status metadata only, not source payloads or full diffs.
+
+Explicitly authorized PHP source has normal WordPress-runtime authority. **Source Editing is administrator-level code trust, not a sandbox.**
 
 ## Advanced Metadata boundary
 

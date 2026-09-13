@@ -40,6 +40,8 @@ function wp_native_builder_bridge_uninstall_site_options() {
 }
 
 if ( is_multisite() ) {
+	delete_site_option( 'wp_native_builder_bridge_source_recovery' );
+	delete_site_option( 'wp_native_builder_bridge_source_lock' );
 	$site_ids = get_sites(
 		array(
 			'fields' => 'ids',
@@ -53,5 +55,7 @@ if ( is_multisite() ) {
 		restore_current_blog();
 	}
 } else {
+	delete_option( 'wp_native_builder_bridge_source_recovery' );
+	delete_option( 'wp_native_builder_bridge_source_lock' );
 	wp_native_builder_bridge_uninstall_site_options();
 }

@@ -64,6 +64,17 @@ Installation accepts WordPress.org slugs only. The connected user needs the matc
 
 If WordPress requires interactive filesystem credentials, the Bridge reports that manual filesystem setup is required rather than collecting those credentials.
 
+
+## Installed plugin/theme source editing is denied or requires recovery
+
+Source editing requires **Code & Extensions** and the separate **Source Editing** group. The connected WordPress user must also currently have `edit_plugins` or `edit_themes`, and WordPress file-modification policy must allow the operation. `DISALLOW_FILE_EDIT`, `DISALLOW_FILE_MODS`, multisite/Super Admin rules, or a non-writable target can therefore deny it even when both Bridge groups are enabled.
+
+The Bridge does not collect FTP/SSH filesystem credentials. If the exact installed target is not directly writable by the WordPress PHP process, fix deployment ownership/permissions through the host's normal administration path and retry. Do not broaden permissions to arbitrary server paths.
+
+If apply returns a stale/conflict result, read and preview the exact file again before deciding whether to retry. If it returns `recovery_required` or an uncertain-partial-state result, do not start another source write: inspect the exact target and use `source-file-recover` only with the pending candidate hash. Recovery refuses to overwrite bytes that no longer match the Bridge-owned candidate.
+
+A PHP runtime validation failure can restore the previous file bytes, but it cannot undo arbitrary side effects that candidate code may already have performed before failing. Source Editing is administrator-level code trust, not a sandbox.
+
 ## Workspace data is not visible through content tools
 
 That is intentional. Workspace documents/tasks are private internal objects and are accessible only through `workspace-resume`, `workspace-document`, `workspace-task`, and the WP Native Builder admin screens.

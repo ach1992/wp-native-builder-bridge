@@ -107,7 +107,7 @@ final class Source_Editing_Abilities {
 	 * @return bool
 	 */
 	public function can_source_action( $input ) {
-		if ( ! $this->source_boundary_enabled() || ! is_array( $input ) || empty( $input['kind'] ) ) {
+		if ( ! $this->source_boundary_enabled() || ! wp_is_file_mod_allowed( 'wp_native_builder_bridge_source_editing' ) || ! is_array( $input ) || empty( $input['kind'] ) ) {
 			return false;
 		}
 		$kind = (string) $input['kind'];
@@ -123,11 +123,11 @@ final class Source_Editing_Abilities {
 	 * @return bool
 	 */
 	public function can_recover() {
-		if ( ! $this->source_boundary_enabled() ) {
+		if ( ! $this->source_boundary_enabled() || ! wp_is_file_mod_allowed( 'wp_native_builder_bridge_source_editing' ) ) {
 			return false;
 		}
 
-		$record = get_option( self::RECOVERY_OPTION, null );
+		$record = $this->state_get( self::RECOVERY_OPTION, null );
 		if ( ! is_array( $record ) || empty( $record['kind'] ) ) {
 			return current_user_can( 'edit_plugins' ) || current_user_can( 'edit_themes' );
 		}
@@ -142,6 +142,9 @@ final class Source_Editing_Abilities {
 	 * @return array<string,mixed>|WP_Error
 	 */
 	public function read( $input ) {
+		if ( ! $this->can_source_action( $input ) ) {
+			return $this->permission_denied();
+		}
 		if ( ! is_array( $input ) || empty( $input['kind'] ) ) {
 			return $this->invalid_input();
 		}
@@ -208,6 +211,9 @@ final class Source_Editing_Abilities {
 	 * @return array<string,mixed>|WP_Error
 	 */
 	public function preview( $input ) {
+		if ( ! $this->can_source_action( $input ) ) {
+			return $this->permission_denied();
+		}
 		if ( ! is_array( $input ) || ! isset( $input['candidate'] ) || ! is_string( $input['candidate'] ) ) {
 			return $this->invalid_input();
 		}
@@ -248,6 +254,9 @@ final class Source_Editing_Abilities {
 	 * @return array<string,mixed>|WP_Error
 	 */
 	public function apply( $input ) {
+		if ( ! $this->can_source_action( $input ) ) {
+			return $this->permission_denied();
+		}
 		if ( ! is_array( $input ) || ! isset( $input['candidate'], $input['preimage_sha256'], $input['candidate_sha256'], $input['candidate_id'] )
 			|| ! is_string( $input['candidate'] ) || ! is_string( $input['preimage_sha256'] ) || ! is_string( $input['candidate_sha256'] ) || ! is_string( $input['candidate_id'] ) ) {
 			return $this->invalid_input();
@@ -282,14 +291,15 @@ final class Source_Editing_Abilities {
 		if ( ! $target['writable'] ) {
 			return new WP_Error( 'source_file_not_directly_writable', __( 'The exact installed source file is not directly writable by the WordPress PHP process. Bridge does not collect FTP or SSH filesystem credentials.', 'wp-native-builder-bridge' ) );
 		}
-		if ( false !== get_option( self::RECOVERY_OPTION, false ) ) {
+		if ( false !== $this->state_get( self::RECOVERY_OPTION, false ) ) {
 			return new WP_Error( 'source_recovery_required', __( 'A previous source edit still owns pending recovery material. Recover or reconcile it before another source write.', 'wp-native-builder-bridge' ), array( 'outcome' => 'recovery_required' ) );
 		}
 
 		$token = wp_generate_uuid4();
-		if ( ! add_option( self::LOCK_OPTION, $token, '', false ) ) {
+		if ( ! $this->state_add( self::LOCK_OPTION, $token ) ) {
 			return new WP_Error( 'source_edit_locked', __( 'Another Bridge source edit is already in progress.', 'wp-native-builder-bridge' ) );
 		}
+		register_shutdown_function( array( $this, 'shutdown_recover' ), $token );
 
 		try {
 			$locked_target = $this->resolve_target_from_input( $input );
@@ -312,11 +322,10 @@ final class Source_Editing_Abilities {
 				'preimage'         => $preimage,
 				'created_gmt'      => gmdate( 'c' ),
 			);
-			if ( ! add_option( self::RECOVERY_OPTION, $record, '', false ) ) {
+			if ( ! $this->state_add( self::RECOVERY_OPTION, $record ) ) {
 				return new WP_Error( 'source_recovery_required', __( 'Recovery material already exists for another source edit.', 'wp-native-builder-bridge' ), array( 'outcome' => 'recovery_required' ) );
 			}
 
-			register_shutdown_function( array( $this, 'shutdown_recover' ), $token );
 			if ( function_exists( 'ignore_user_abort' ) ) {
 				ignore_user_abort( true );
 			}
@@ -368,20 +377,27 @@ final class Source_Editing_Abilities {
 	 * @return array<string,mixed>|WP_Error
 	 */
 	public function recover( $input ) {
-		$record = get_option( self::RECOVERY_OPTION, null );
+		if ( ! $this->can_recover() ) {
+			return $this->permission_denied();
+		}
+		$record = $this->state_get( self::RECOVERY_OPTION, null );
 		if ( ! is_array( $record ) || empty( $record['token'] ) ) {
-			return array( 'outcome' => 'success', 'recovered' => false, 'preimage_sha256' => '' );
+			return array(
+				'outcome'         => 'success',
+				'recovered'       => false,
+				'preimage_sha256' => '',
+			);
 		}
 		if ( ! is_array( $input ) || empty( $input['candidate_sha256'] ) || ! is_string( $input['candidate_sha256'] )
 			|| ! hash_equals( (string) $record['candidate_sha256'], strtolower( $input['candidate_sha256'] ) ) ) {
 			return new WP_Error( 'source_recovery_identity_required', __( 'Recovery requires the exact pending candidate hash.', 'wp-native-builder-bridge' ), array( 'outcome' => 'conflict' ) );
 		}
 
-		$lock = get_option( self::LOCK_OPTION, false );
+		$lock = $this->state_get( self::LOCK_OPTION, false );
 		if ( false !== $lock && (string) $lock !== (string) $record['token'] ) {
 			return new WP_Error( 'source_edit_locked', __( 'Another Bridge source edit is already in progress.', 'wp-native-builder-bridge' ) );
 		}
-		if ( false === $lock && ! add_option( self::LOCK_OPTION, (string) $record['token'], '', false ) ) {
+		if ( false === $lock && ! $this->state_add( self::LOCK_OPTION, (string) $record['token'] ) ) {
 			return new WP_Error( 'source_edit_locked', __( 'Another Bridge source edit is already in progress.', 'wp-native-builder-bridge' ) );
 		}
 
@@ -408,11 +424,10 @@ final class Source_Editing_Abilities {
 	 * @return void
 	 */
 	public function shutdown_recover( $token ) {
-		$record = get_option( self::RECOVERY_OPTION, null );
-		if ( ! is_array( $record ) || empty( $record['token'] ) || ! hash_equals( (string) $record['token'], (string) $token ) ) {
-			return;
+		$record = $this->state_get( self::RECOVERY_OPTION, null );
+		if ( is_array( $record ) && ! empty( $record['token'] ) && hash_equals( (string) $record['token'], (string) $token ) ) {
+			$this->restore_record( $record );
 		}
-		$this->restore_record( $record );
 		$this->release_lock( $token );
 	}
 
@@ -460,9 +475,13 @@ final class Source_Editing_Abilities {
 		if ( ! isset( $plugins[ $plugin ] ) ) {
 			return new WP_Error( 'source_extension_not_found', __( 'The installed source extension was not found.', 'wp-native-builder-bridge' ) );
 		}
-		$root = realpath( dirname( WP_PLUGIN_DIR . '/' . $plugin ) );
-		if ( false === $root ) {
+		$plugin_base = realpath( WP_PLUGIN_DIR );
+		$root        = realpath( dirname( WP_PLUGIN_DIR . '/' . $plugin ) );
+		if ( false === $plugin_base || false === $root ) {
 			return new WP_Error( 'source_root_unavailable', __( 'The installed extension source root cannot be resolved.', 'wp-native-builder-bridge' ) );
+		}
+		if ( $root !== $plugin_base && ! $this->path_is_within( $root, $plugin_base ) ) {
+			return new WP_Error( 'source_path_escape', __( 'The installed source file resolves outside its exact extension root and cannot be edited through Bridge.', 'wp-native-builder-bridge' ) );
 		}
 		$plugin_dir = dirname( $plugin );
 		$allowed    = array();
@@ -502,9 +521,13 @@ final class Source_Editing_Abilities {
 		if ( ! $theme->exists() ) {
 			return new WP_Error( 'source_extension_not_found', __( 'The installed source extension was not found.', 'wp-native-builder-bridge' ) );
 		}
-		$root = realpath( $theme->get_stylesheet_directory() );
-		if ( false === $root ) {
+		$theme_base = realpath( get_theme_root( $stylesheet ) );
+		$root       = realpath( $theme->get_stylesheet_directory() );
+		if ( false === $theme_base || false === $root ) {
 			return new WP_Error( 'source_root_unavailable', __( 'The installed extension source root cannot be resolved.', 'wp-native-builder-bridge' ) );
+		}
+		if ( $root !== $theme_base && ! $this->path_is_within( $root, $theme_base ) ) {
+			return new WP_Error( 'source_path_escape', __( 'The installed source file resolves outside its exact extension root and cannot be edited through Bridge.', 'wp-native-builder-bridge' ) );
 		}
 		$allowed = array();
 		foreach ( wp_get_theme_file_editable_extensions( $theme ) as $type ) {
@@ -535,7 +558,7 @@ final class Source_Editing_Abilities {
 	 */
 	private function resolved_target( $kind, $extension, $file, $root, $path, $active, $network_active ) {
 		$canonical = realpath( $path );
-		if ( false === $canonical || ! is_file( $canonical ) || ! $this->path_is_within( $canonical, $root ) ) {
+		if ( is_link( $path ) || false === $canonical || ! is_file( $canonical ) || ! $this->path_is_within( $canonical, $root ) ) {
 			return new WP_Error( 'source_path_escape', __( 'The installed source file resolves outside its exact extension root and cannot be edited through Bridge.', 'wp-native-builder-bridge' ) );
 		}
 		$type = strtolower( pathinfo( $canonical, PATHINFO_EXTENSION ) );
@@ -662,9 +685,10 @@ final class Source_Editing_Abilities {
 	 * @return true|WP_Error
 	 */
 	private function write_exact_bytes( $target, $bytes ) {
-		$filesystem = $this->filesystem();
-		$mode       = defined( 'FS_CHMOD_FILE' ) ? FS_CHMOD_FILE : 0644;
-		if ( ! $filesystem->put_contents( $target['canonical_path'], $bytes, $mode ) ) {
+		$filesystem  = $this->filesystem();
+		$mode_string = $filesystem->getchmod( $target['canonical_path'] );
+		$mode        = intval( $mode_string, 8 );
+		if ( 0 === $mode || ! $filesystem->put_contents( $target['canonical_path'], $bytes, $mode ) ) {
 			return new WP_Error( 'source_write_failed', __( 'WordPress direct filesystem access could not persist the source candidate.', 'wp-native-builder-bridge' ) );
 		}
 		wp_opcache_invalidate( $target['canonical_path'], true );
@@ -684,7 +708,7 @@ final class Source_Editing_Abilities {
 		$scrape_nonce = wp_generate_password( 32, false, false );
 		$transient    = 'scrape_key_' . $scrape_key;
 		set_transient( $transient, $scrape_nonce, 60 );
-		$params = array(
+		$params  = array(
 			'wp_scrape_key'   => $scrape_key,
 			'wp_scrape_nonce' => $scrape_nonce,
 		);
@@ -820,19 +844,51 @@ final class Source_Editing_Abilities {
 
 	/** @param string $token Token. @return bool */
 	private function delete_recovery_if_token( $token ) {
-		$current = get_option( self::RECOVERY_OPTION, null );
+		$current = $this->state_get( self::RECOVERY_OPTION, null );
 		if ( ! is_array( $current ) || empty( $current['token'] ) || ! hash_equals( (string) $current['token'], $token ) ) {
 			return false;
 		}
-		return delete_option( self::RECOVERY_OPTION );
+		return $this->state_delete( self::RECOVERY_OPTION );
 	}
 
 	/** @param string $token Token. @return void */
 	private function release_lock( $token ) {
-		$current = get_option( self::LOCK_OPTION, false );
+		$current = $this->state_get( self::LOCK_OPTION, false );
 		if ( false !== $current && hash_equals( (string) $current, (string) $token ) ) {
-			delete_option( self::LOCK_OPTION );
+			$this->state_delete( self::LOCK_OPTION );
 		}
+	}
+
+	/**
+	 * Reads private source-editing state from a scope shared by all sites in a network.
+	 *
+	 * @param string $name    Option name.
+	 * @param mixed  $fallback Default value.
+	 * @return mixed
+	 */
+	private function state_get( $name, $fallback = false ) {
+		return is_multisite() ? get_site_option( $name, $fallback ) : get_option( $name, $fallback );
+	}
+
+	/**
+	 * Atomically claims private source-editing state.
+	 *
+	 * @param string $name  Option name.
+	 * @param mixed  $value Option value.
+	 * @return bool
+	 */
+	private function state_add( $name, $value ) {
+		return is_multisite() ? add_site_option( $name, $value ) : add_option( $name, $value, '', false );
+	}
+
+	/**
+	 * Deletes private source-editing state from the matching install scope.
+	 *
+	 * @param string $name Option name.
+	 * @return bool
+	 */
+	private function state_delete( $name ) {
+		return is_multisite() ? delete_site_option( $name ) : delete_option( $name );
 	}
 
 	/**
@@ -899,16 +955,24 @@ final class Source_Editing_Abilities {
 	}
 
 	/** @return WP_Error */
+	private function permission_denied() {
+		return new WP_Error( 'source_editing_permission_denied', __( 'Source Editing, Code & Extensions, WordPress file-modification policy, and the matching native file-editor capability must all allow this operation.', 'wp-native-builder-bridge' ) );
+	}
+
+	/** @return WP_Error */
 	private function invalid_input() {
 		return new WP_Error( 'invalid_source_editing_input', __( 'Use one exact installed plugin/theme identity and relative editable source file with the fields required by this source-editing action.', 'wp-native-builder-bridge' ) );
 	}
 
-	/** @param bool $readonly Read-only annotation. @param bool $destructive Destructive annotation. @param bool $idempotent Idempotent annotation. @return array<string,mixed> */
-	private function meta( $readonly, $destructive, $idempotent ) {
+	/** @param bool $is_readonly Read-only annotation. @param bool $destructive Destructive annotation. @param bool $idempotent Idempotent annotation. @return array<string,mixed> */
+	private function meta( $is_readonly, $destructive, $idempotent ) {
 		return array(
-			'mcp'         => array( 'public' => true, 'type' => 'tool' ),
+			'mcp'         => array(
+				'public' => true,
+				'type'   => 'tool',
+			),
 			'annotations' => array(
-				'readonly'    => $readonly,
+				'readonly'    => $is_readonly,
 				'destructive' => $destructive,
 				'idempotent'  => $idempotent,
 			),
@@ -918,18 +982,42 @@ final class Source_Editing_Abilities {
 	/** @return array<string,mixed> */
 	private function target_properties() {
 		return array(
-			'kind'      => array( 'type' => 'string', 'enum' => array( 'plugin', 'theme' ) ),
-			'extension' => array( 'type' => 'string', 'minLength' => 1, 'maxLength' => 300 ),
-			'file'      => array( 'type' => 'string', 'minLength' => 1, 'maxLength' => 500 ),
+			'kind'      => array(
+				'type' => 'string',
+				'enum' => array( 'plugin', 'theme' ),
+			),
+			'extension' => array(
+				'type'      => 'string',
+				'minLength' => 1,
+				'maxLength' => 300,
+			),
+			'file'      => array(
+				'type'      => 'string',
+				'minLength' => 1,
+				'maxLength' => 500,
+			),
 		);
 	}
 
 	/** @return array<string,mixed> */
 	private function read_input_schema() {
-		$properties              = $this->target_properties();
-		$properties['action']    = array( 'type' => 'string', 'enum' => array( 'list', 'read' ), 'default' => 'list' );
-		$properties['page']      = array( 'type' => 'integer', 'minimum' => 1, 'default' => 1 );
-		$properties['per_page']  = array( 'type' => 'integer', 'minimum' => 1, 'maximum' => 100, 'default' => 25 );
+		$properties             = $this->target_properties();
+		$properties['action']   = array(
+			'type'    => 'string',
+			'enum'    => array( 'list', 'read' ),
+			'default' => 'list',
+		);
+		$properties['page']     = array(
+			'type'    => 'integer',
+			'minimum' => 1,
+			'default' => 1,
+		);
+		$properties['per_page'] = array(
+			'type'    => 'integer',
+			'minimum' => 1,
+			'maximum' => 100,
+			'default' => 25,
+		);
 		return array(
 			'type'                 => 'object',
 			'properties'           => $properties,
@@ -941,22 +1029,44 @@ final class Source_Editing_Abilities {
 	/** @param bool $apply Include apply binding fields. @return array<string,mixed> */
 	private function candidate_input_schema( $apply ) {
 		$properties              = $this->target_properties();
-		$properties['candidate'] = array( 'type' => 'string', 'maxLength' => self::MAX_SOURCE_BYTES );
+		$properties['candidate'] = array(
+			'type'      => 'string',
+			'maxLength' => self::MAX_SOURCE_BYTES,
+		);
 		$required                = array( 'kind', 'extension', 'file', 'candidate' );
 		if ( $apply ) {
-			$properties['preimage_sha256']  = array( 'type' => 'string', 'pattern' => '^[a-f0-9]{64}$' );
-			$properties['candidate_sha256'] = array( 'type' => 'string', 'pattern' => '^[a-f0-9]{64}$' );
-			$properties['candidate_id']     = array( 'type' => 'string', 'pattern' => '^[a-f0-9]{64}$' );
+			$properties['preimage_sha256']  = array(
+				'type'    => 'string',
+				'pattern' => '^[a-f0-9]{64}$',
+			);
+			$properties['candidate_sha256'] = array(
+				'type'    => 'string',
+				'pattern' => '^[a-f0-9]{64}$',
+			);
+			$properties['candidate_id']     = array(
+				'type'    => 'string',
+				'pattern' => '^[a-f0-9]{64}$',
+			);
 			$required                       = array_merge( $required, array( 'preimage_sha256', 'candidate_sha256', 'candidate_id' ) );
 		}
-		return array( 'type' => 'object', 'properties' => $properties, 'required' => $required, 'additionalProperties' => false );
+		return array(
+			'type'                 => 'object',
+			'properties'           => $properties,
+			'required'             => $required,
+			'additionalProperties' => false,
+		);
 	}
 
 	/** @return array<string,mixed> */
 	private function recover_input_schema() {
 		return array(
 			'type'                 => 'object',
-			'properties'           => array( 'candidate_sha256' => array( 'type' => 'string', 'pattern' => '^[a-f0-9]{64}$' ) ),
+			'properties'           => array(
+				'candidate_sha256' => array(
+					'type'    => 'string',
+					'pattern' => '^[a-f0-9]{64}$',
+				),
+			),
 			'required'             => array( 'candidate_sha256' ),
 			'additionalProperties' => false,
 		);
@@ -989,7 +1099,10 @@ final class Source_Editing_Abilities {
 			'type'                 => 'object',
 			'properties'           => array(
 				'action'      => array( 'type' => 'string' ),
-				'items'       => array( 'type' => 'array', 'items' => $this->target_output_schema() ),
+				'items'       => array(
+					'type'  => 'array',
+					'items' => $this->target_output_schema(),
+				),
 				'page'        => array( 'type' => 'integer' ),
 				'per_page'    => array( 'type' => 'integer' ),
 				'total'       => array( 'type' => 'integer' ),
