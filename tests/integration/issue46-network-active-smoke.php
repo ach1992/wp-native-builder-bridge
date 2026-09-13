@@ -15,6 +15,7 @@ $original_user     = get_current_user_id();
 $plugin            = 'wpnb-network-source/wpnb-network-source.php';
 $plugin_file       = WP_PLUGIN_DIR . '/' . $plugin;
 $original          = file_get_contents( $plugin_file );
+$network_lock      = null;
 
 try {
 	wpnb_issue46_network_assert( is_multisite(), 'Network-active smoke must run on multisite.' );
@@ -72,7 +73,7 @@ try {
 	wpnb_issue46_network_assert( is_wp_error( $failed ) && 'source_runtime_validation_failed' === $failed->get_error_code(), 'Network-active fatal-before-scraper path was not rejected.' );
 	wpnb_issue46_network_assert( $before_fatal === file_get_contents( $plugin_file ), 'Network-active fatal validation did not restore exact preimage.' );
 
-	// File state is shared across sites, so the cooperative lock and recovery slot must be network-scoped.
+	// The shared file itself is the cooperative lock boundary across every site in the network.
 	$site_ids          = get_sites(
 		array(
 			'fields' => 'ids',
@@ -87,15 +88,15 @@ try {
 		}
 	}
 	wpnb_issue46_network_assert( $secondary_blog_id > 0, 'Secondary multisite fixture is missing.' );
-	$network_lock = 'issue46-network-lock-' . wp_generate_uuid4();
-	wpnb_issue46_network_assert( add_site_option( 'wp_native_builder_bridge_source_lock', $network_lock ), 'Could not create network-scoped source lock fixture.' );
+	$network_lock = new SplFileObject( $plugin_file, 'rb' );
+	wpnb_issue46_network_assert( $network_lock->flock( LOCK_EX | LOCK_NB ), 'Could not acquire external shared-file lock fixture.' );
 	switch_to_blog( $secondary_blog_id );
 	$secondary_original_settings = get_option( Settings::OPTION_NAME, array() );
 	update_option( Settings::OPTION_NAME, $enabled, false );
 	$secondary_current   = file_get_contents( $plugin_file );
 	$secondary_candidate = str_replace( "'network-valid'", "'secondary-attempt'", $secondary_current );
 	$secondary_bound     = $preview->execute( array_merge( $target, array( 'candidate' => $secondary_candidate ) ) );
-	wpnb_issue46_network_assert( ! is_wp_error( $secondary_bound ), 'Secondary-site preview failed before network lock test.' );
+	wpnb_issue46_network_assert( ! is_wp_error( $secondary_bound ), 'Secondary-site preview failed before shared-file lock test.' );
 	$secondary_locked = $apply->execute(
 		array_merge(
 			$target,
@@ -107,11 +108,12 @@ try {
 			)
 		)
 	);
-	wpnb_issue46_network_assert( is_wp_error( $secondary_locked ) && 'source_edit_locked' === $secondary_locked->get_error_code(), 'A second site bypassed the network-wide source lock.' );
+	wpnb_issue46_network_assert( is_wp_error( $secondary_locked ) && 'source_edit_locked' === $secondary_locked->get_error_code(), 'A second site bypassed the shared-file advisory lock.' );
 	wpnb_issue46_network_assert( $secondary_current === file_get_contents( $plugin_file ), 'Cross-site lock denial changed shared source bytes.' );
 	update_option( Settings::OPTION_NAME, $secondary_original_settings, false );
 	restore_current_blog();
-	delete_site_option( 'wp_native_builder_bridge_source_lock' );
+	$network_lock->flock( LOCK_UN );
+	$network_lock = null;
 
 	$pending = array(
 		'version'          => 1,
@@ -167,10 +169,12 @@ try {
 
 	echo "PASS: Issue #46 multisite Super Admin and network-active runtime/recovery behavior.\n";
 } finally {
+	if ( $network_lock instanceof SplFileObject ) {
+		$network_lock->flock( LOCK_UN );
+	}
 	wp_set_current_user( $original_user );
 	file_put_contents( $plugin_file, $original );
 	wp_opcache_invalidate( $plugin_file, true );
 	update_option( Settings::OPTION_NAME, $original_settings, false );
 	delete_site_option( 'wp_native_builder_bridge_source_recovery' );
-	delete_site_option( 'wp_native_builder_bridge_source_lock' );
 }
