@@ -763,7 +763,7 @@ final class Media_Abilities {
 			|| preg_match( '/(^|\.)(php[0-9]*|phtml|pht|phar|cgi)(\.|$)/i', $filename ) ) {
 			return $this->logged_error( $ability, 'invalid_media_filename', __( 'A valid filename with an extension is required.', 'wp-native-builder-bridge' ) );
 		}
-		if ( ! wp_http_validate_url( $input['url'] ) ) {
+		if ( ! $this->is_safe_import_destination( $input['url'] ) ) {
 			return $this->logged_error( $ability, 'unsafe_media_import_url', __( 'WordPress did not accept the media URL as a safe HTTP(S) destination.', 'wp-native-builder-bridge' ) );
 		}
 		$max_bytes = (int) wp_max_upload_size();
@@ -779,20 +779,46 @@ final class Media_Abilities {
 		if ( ! $this->can_import_url( $input ) ) {
 			return $this->logged_error( $ability, 'media_import_permission_denied', __( 'Remote Media, Builder Write, and the required WordPress upload authority must be enabled.', 'wp-native-builder-bridge' ) );
 		}
-		$response = wp_safe_remote_get(
-			$input['url'],
-			array(
-				'timeout'             => 30,
-				'redirection'         => 5,
-				'sslverify'           => true,
-				'stream'              => true,
-				'filename'            => $temp_file,
-				'limit_response_size' => $max_bytes + 1,
-				'decompress'          => false,
-				'headers'             => array( 'Accept-Encoding' => 'identity' ),
-				'cookies'             => array(),
-			)
-		);
+		$redirect_failure = '';
+		$redirect_guard   = function ( $location, $headers, $data, $options ) use ( $temp_file, $input, &$redirect_failure ) {
+			// Requests preserves the owned stream filename across this redirect chain.
+			if ( ( $options['filename'] ?? null ) !== $temp_file ) {
+				return;
+			}
+			if ( ! $this->can_import_url( $input ) ) {
+				$redirect_failure = 'permission';
+			} elseif ( ! $this->is_safe_import_destination( $location ) ) {
+				$redirect_failure = 'destination';
+			}
+			if ( '' !== $redirect_failure ) {
+				throw new \WpOrg\Requests\Exception( 'The media redirect was refused.', 'wpnb_media_redirect_refused' );
+			}
+		};
+		add_action( 'requests-requests.before_redirect', $redirect_guard, PHP_INT_MAX, 4 );
+		try {
+			$response = wp_safe_remote_get(
+				$input['url'],
+				array(
+					'timeout'             => 30,
+					'redirection'         => 5,
+					'sslverify'           => true,
+					'stream'              => true,
+					'filename'            => $temp_file,
+					'limit_response_size' => $max_bytes + 1,
+					'decompress'          => false,
+					'headers'             => array( 'Accept-Encoding' => 'identity' ),
+					'cookies'             => array(),
+				)
+			);
+		} finally {
+			remove_action( 'requests-requests.before_redirect', $redirect_guard, PHP_INT_MAX );
+		}
+		if ( 'permission' === $redirect_failure ) {
+			return $this->logged_error( $ability, 'media_import_permission_denied', __( 'Remote Media, Builder Write, and the required WordPress upload authority must be enabled.', 'wp-native-builder-bridge' ) );
+		}
+		if ( 'destination' === $redirect_failure ) {
+			return $this->logged_error( $ability, 'unsafe_media_import_url', __( 'WordPress did not accept the media URL as a safe HTTP(S) destination.', 'wp-native-builder-bridge' ) );
+		}
 		// HTTP/provider errors can contain signed URLs, paths, or response bodies.
 		if ( is_wp_error( $response ) || 200 !== (int) wp_remote_retrieve_response_code( $response ) ) {
 			return $this->logged_error( $ability, 'media_import_http_failed', __( 'WordPress could not download a complete media response.', 'wp-native-builder-bridge' ) );
@@ -820,6 +846,49 @@ final class Media_Abilities {
 			return $this->logged_error( $ability, 'media_import_permission_denied', __( 'Remote Media, Builder Write, and the required WordPress upload authority must be enabled.', 'wp-native-builder-bridge' ) );
 		}
 		return $this->attach_remote_media( $temp_file, $filename, (int) $bytes, $input, $state );
+	}
+
+	/**
+	 * Supplements Core validation with private/reserved address rejection.
+	 *
+	 * Core's safe URL helper does not exclude every reserved network range.
+	 * Resolver checks do not pin transport DNS or override hosting egress policy.
+	 *
+	 * @param string $url Initial or absolute redirected URL.
+	 * @return bool Whether the destination passes native and address validation.
+	 */
+	private function is_safe_import_destination( $url ) {
+		if ( ! is_string( $url ) || strlen( $url ) > 8192 || preg_match( '/[\x00-\x20\x7f]/', $url ) || ! wp_http_validate_url( $url ) ) {
+			return false;
+		}
+		$host = rtrim( (string) wp_parse_url( $url, PHP_URL_HOST ), '.' );
+		if ( filter_var( $host, FILTER_VALIDATE_IP ) ) {
+			$addresses = array( $host );
+		} else {
+			$addresses = gethostbynamel( $host );
+			$records   = dns_get_record( $host, DNS_A | DNS_AAAA );
+			if ( ! is_array( $addresses ) || empty( $addresses ) || ! is_array( $records ) ) {
+				return false;
+			}
+			foreach ( $records as $record ) {
+				if ( isset( $record['ip'] ) ) {
+					$addresses[] = $record['ip'];
+				}
+				if ( isset( $record['ipv6'] ) ) {
+					$addresses[] = $record['ipv6'];
+				}
+			}
+		}
+		$flags = FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE;
+		if ( defined( 'FILTER_FLAG_GLOBAL_RANGE' ) ) {
+			$flags |= FILTER_FLAG_GLOBAL_RANGE;
+		}
+		foreach ( array_unique( $addresses ) as $address ) {
+			if ( ! filter_var( $address, FILTER_VALIDATE_IP, $flags ) ) {
+				return false;
+			}
+		}
+		return true;
 	}
 
 	/**

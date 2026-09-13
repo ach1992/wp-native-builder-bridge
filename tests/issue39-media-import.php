@@ -1,4 +1,14 @@
 <?php
+namespace WP_Native_Builder_Bridge\Abilities {
+    function gethostbynamel( $host ) { return $GLOBALS['wpnb39']['resolved_ipv4'] ?? array( '93.184.216.34' ); }
+    function dns_get_record( $host, $type ) { return $GLOBALS['wpnb39']['dns_records'] ?? array(); }
+}
+namespace WpOrg\Requests {
+    class Exception extends \Exception {
+        public function __construct( $message, $type ) { parent::__construct( $message ); }
+    }
+}
+namespace {
 /** Dependency-free URL media import regressions. */
 require __DIR__ . '/bootstrap.php';
 
@@ -40,11 +50,25 @@ function wp_delete_file( $file ) {
 }
 function wp_http_validate_url( $url ) {
 	$parts = parse_url( $url );
-	return is_array( $parts ) && in_array( $parts['scheme'] ?? '', array( 'http', 'https' ), true ) && ! empty( $parts['host'] ) && ! isset( $parts['user'], $parts['pass'] ) && ! isset( $parts['user'] ) && ! in_array( $parts['host'], array( 'localhost', '127.0.0.1', '169.254.169.254' ), true ) ? $url : false;
+	return is_array( $parts ) && in_array( $parts['scheme'] ?? '', array( 'http', 'https' ), true ) && ! empty( $parts['host'] ) && ! isset( $parts['user'], $parts['pass'] ) && ! isset( $parts['user'] ) && ! in_array( $parts['host'], array( 'localhost', '127.0.0.1' ), true ) ? $url : false;
+}
+function remove_action( $hook, $callback, $priority = 10 ) {
+    $GLOBALS['wpnb_test']['actions'][ $hook ] = array_values( array_filter( $GLOBALS['wpnb_test']['actions'][ $hook ] ?? array(), static fn( $registered ) => $registered !== $callback ) );
+    return true;
 }
 function wp_safe_remote_get( $url, $args ) {
 	++$GLOBALS['wpnb39']['http_calls'];
 	$GLOBALS['wpnb39']['args'] = $args;
+	if ( isset( $GLOBALS['wpnb39']['redirect'] ) ) {
+		if ( 'revoke_redirect' === $GLOBALS['wpnb39']['mode'] ) { $GLOBALS['wpnb_test']['options'][ Settings::OPTION_NAME ]['remote_media'] = 0; }
+		try {
+			foreach ( $GLOBALS['wpnb_test']['actions']['requests-requests.before_redirect'] ?? array() as $callback ) {
+				$callback( $GLOBALS['wpnb39']['redirect'], array(), null, array( 'filename' => $args['filename'] ) );
+			}
+		} catch ( \WpOrg\Requests\Exception $error ) { return new WP_Error( 'http_request_failed', $error->getMessage() ); }
+		++$GLOBALS['wpnb39']['http_calls'];
+	}
+
 	file_put_contents( $args['filename'], substr( $GLOBALS['wpnb39']['payload'], 0, $args['limit_response_size'] ) );
 	if ( 'revoke_http' === $GLOBALS['wpnb39']['mode'] ) { $GLOBALS['wpnb_test']['options'][ Settings::OPTION_NAME ]['remote_media'] = 0; }
 	if ( 'missing_staging' === $GLOBALS['wpnb39']['mode'] ) { wp_delete_file( $args['filename'] ); }
@@ -136,6 +160,23 @@ try {
 		wpnb39_error( $media->import_url( array_replace( $input, array( 'url' => $url ) ) ), 'unsafe_media_import_url' );
 		wpnb39_assert( 0 === $GLOBALS['wpnb39']['http_calls'], 'Unsafe URL reached transport.' );
 	}
+	foreach ( array( 'http://169.254.169.254/media', 'http://100.64.0.1/media', 'http://192.0.2.1/media', 'http://240.0.0.1/media' ) as $url ) {
+		wpnb39_reset();
+		wpnb39_error( $media->import_url( array_replace( $input, array( 'url' => $url ) ) ), 'unsafe_media_import_url' );
+		wpnb39_assert( 0 === $GLOBALS['wpnb39']['http_calls'], 'Reserved address reached HTTP.' );
+		wpnb39_reset(); $GLOBALS['wpnb39']['redirect'] = $url;
+		wpnb39_error( $media->import_url( $input ), 'unsafe_media_import_url' );
+		wpnb39_assert( 1 === $GLOBALS['wpnb39']['http_calls'], 'Unsafe redirect reached a second transport.' );
+		wpnb39_assert( empty( $GLOBALS['wpnb_test']['actions']['requests-requests.before_redirect'] ), 'Redirect guard survived the request.' );
+	}
+	foreach ( array( array( 'resolved_ipv4' => array( '93.184.216.34', '169.254.1.1' ) ), array( 'dns_records' => array( array( 'ipv6' => 'fe80::1' ) ) ), array( 'dns_records' => false ) ) as $resolution ) {
+		wpnb39_reset(); $GLOBALS['wpnb39'] = array_replace( $GLOBALS['wpnb39'], $resolution );
+		wpnb39_error( $media->import_url( $input ), 'unsafe_media_import_url' );
+		wpnb39_assert( 0 === $GLOBALS['wpnb39']['http_calls'], 'Non-public or failed resolution reached HTTP.' );
+	}
+	wpnb39_reset(); $GLOBALS['wpnb39']['redirect'] = $input['url']; $GLOBALS['wpnb39']['mode'] = 'revoke_redirect';
+	wpnb39_error( $media->import_url( $input ), 'media_import_permission_denied' );
+	wpnb39_assert( 1 === $GLOBALS['wpnb39']['http_calls'], 'Revoked redirect reached transport.' );
 	foreach ( array( '../image.png', 'folder\\image.png', "image\0.png", str_repeat( 'a', 256 ) ) as $filename ) {
 		wpnb39_reset();
 		wpnb39_error( $media->import_url( array_replace( $input, array( 'filename' => $filename ) ) ), 'invalid_media_import_input' );
@@ -220,4 +261,6 @@ try {
 } finally {
 	restore_error_handler();
 	foreach ( $GLOBALS['wpnb39']['files'] as $file ) { if ( is_file( $file ) ) { unlink( $file ); } }
+}
+
 }

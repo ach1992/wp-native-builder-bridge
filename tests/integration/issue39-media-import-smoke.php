@@ -17,6 +17,8 @@ $staging = array();
 $destinations = array();
 $calls = 0;
 $unexpected_calls = 0;
+$redirect_target = null;
+$redirect_forwarded = 0;
 $mode = 'success';
 $source = 'https://s.w.org/wpnb-media-import-fixture?signature=PRIVATE_MEDIA_MARKER';
 $input = array( 'url' => $source, 'filename' => 'wpnb-import.png' );
@@ -24,7 +26,7 @@ $png = base64_decode( 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42
 $enabled = $settings->defaults();
 $enabled[ Settings::GROUP_BUILDER_WRITE ] = 1;
 $enabled[ Settings::GROUP_REMOTE_MEDIA ] = 1;
-$mock = static function ( $pre, $args, $url ) use ( &$calls, &$mode, &$staging, &$unexpected_calls, $source, $png ) {
+$mock = static function ( $pre, $args, $url ) use ( &$calls, &$mode, &$staging, &$unexpected_calls, &$redirect_target, &$redirect_forwarded, $source, $png ) {
     ++$calls;
     if ( ! in_array( $url, array( $source, 'https://wordpress.org/wpnb-media-import-fixture' ), true ) ) {
         ++$unexpected_calls;
@@ -36,6 +38,24 @@ $mock = static function ( $pre, $args, $url ) use ( &$calls, &$mode, &$staging, 
     wpnb39_integration_assert( 30 === $args['timeout'] && 5 === $args['redirection'], 'Network budgets must remain finite.' );
     wpnb39_integration_assert( wp_max_upload_size() + 1 === $args['limit_response_size'], 'Streaming must use the current WordPress limit and overflow sentinel.' );
     $staging[] = $args['filename'];
+    if ( null !== $redirect_target ) {
+        // Dispatch the real Core/Requests redirect hooks without sending a redirect request.
+        $headers = array(); $data = null;
+        $options = array( 'filename' => $args['filename'] );
+        $response = new \WpOrg\Requests\Response();
+        $location = $redirect_target;
+        $unrelated = new WP_HTTP_Requests_Hooks( $url, $args );
+        $unrelated_options = array( 'filename' => 'unrelated-fixture-stream' );
+        $unrelated->dispatch( 'requests.before_redirect', array( &$location, &$headers, &$data, &$unrelated_options, $response ) );
+        $hooks = new WP_HTTP_Requests_Hooks( $url, $args );
+        $hooks->register( 'requests.before_redirect', array( 'WP_Http', 'validate_redirects' ) );
+        try {
+            $hooks->dispatch( 'requests.before_redirect', array( &$location, &$headers, &$data, &$options, $response ) );
+        } catch ( \WpOrg\Requests\Exception $error ) {
+            return new WP_Error( 'http_request_failed', 'The fixture redirect was refused.' );
+        }
+        ++$redirect_forwarded;
+    }
     if ( 'http_throw' === $mode || 'translation_throw' === $mode ) { throw new RuntimeException( 'PRIVATE_MEDIA_MARKER ' . $url . ' ' . $args['filename'] ); }
     if ( in_array( $mode, array( 'http_error', 'cleanup_throw', 'cleanup_noop' ), true ) ) { return new WP_Error( 'PRIVATE_MEDIA_MARKER', $url . ' ' . $args['filename'] ); }
     if ( 'large_file' === $mode ) {
@@ -154,12 +174,28 @@ try {
         $redirect_denied = false;
         try { WP_Http::validate_redirects( $unsafe ); }
         catch ( \WpOrg\Requests\Exception $error ) { $redirect_denied = true; }
-        wpnb39_integration_assert( $redirect_denied, 'Native redirect validator accepted an unsafe destination.' );
+        // Core historically omits the link-local range; Bridge must still reject it above.
+        if ( 3 !== $vector_index ) { wpnb39_integration_assert( $redirect_denied, 'Native redirect validator accepted a Core-invalid destination.' ); }
     }
     wpnb39_integration_assert( 0 === $calls, 'Unsafe URL reached fixture transport.' );
     foreach ( array( '../image.png', 'image.php', 'image.phtml', 'package.phar' ) as $filename ) {
         wpnb39_integration_assert( is_wp_error( $ability->execute( array_replace( $input, array( 'filename' => $filename ) ) ) ), 'Invalid or executable filename was accepted.' );
     }
+    foreach ( array( 'http://169.254.169.254/media', 'http://100.64.0.1/media', 'http://192.0.2.1/media' ) as $target ) {
+        $calls = 0; $redirect_forwarded = 0; $redirect_target = $target;
+        $before_hooks = has_action( 'requests-requests.before_redirect' );
+        $denied = $ability->execute( $input );
+        wpnb39_integration_assert( is_wp_error( $denied ) && 'unsafe_media_import_url' === $denied->get_error_code(), 'Bridge did not reject the reserved redirect destination.' );
+        wpnb39_integration_assert( 1 === $calls && 0 === $redirect_forwarded && 0 === $unexpected_calls, 'An unsafe redirect passed the real native hook boundary.' );
+        wpnb39_integration_assert( $before_hooks === has_action( 'requests-requests.before_redirect' ), 'Import redirect guard was not removed after refusal.' );
+        foreach ( $staging as $file ) { wpnb39_integration_assert( ! is_file( $file ), 'Rejected redirect retained staging.' ); }
+    }
+    $redirect_target = 'https://wordpress.org/wpnb-media-import-fixture';
+    $redirect_forwarded = 0;
+    $result = $ability->execute( $input );
+    wpnb39_integration_assert( ! is_wp_error( $result ) && 1 === $redirect_forwarded, 'A public redirect failed the native hook validation.' );
+    $created[] = $result['id'];
+    $redirect_target = null;
     foreach ( array( 'http_error', 'http_status', 'empty', 'oversized', 'truncated', 'invalid_type', 'revoke_http', 'revoke_sideload', 'sideload_error', 'insert_error', 'missing_staging' ) as $failure ) {
         $mode = $failure;
         update_option( Settings::OPTION_NAME, $enabled, false );
