@@ -55,10 +55,13 @@ try {
             $ok( 1 === count( $rows ) && $value === $rows[0]['meta_value'], 'Conditional creation changed the key/value storage representation.' );
         }
         $key = str_repeat( 'k', 256 );
-        $state = $require( $read->execute( $target + array( 'key' => $key ) ), 'Read oversized key absence' );
+        $state = $require( $read->execute( $target + array( 'key' => '_absent_for_oversized' ) ), 'Read valid absent state' );
         $before = $raw_rows( $term_id );
         $result = $update->execute( $target + array( 'key' => $key, 'value_json' => '"not-stored"', 'expected_state_hash' => $state['items'][0]['state_hash'] ) );
-        $ok( is_wp_error( $result ) && 'term_meta_key_not_storable' === $result->get_error_code() && $before === $raw_rows( $term_id ), 'Oversized key was silently truncated or changed existing metadata.' );
+        $ok( is_wp_error( $result ) && 'ability_invalid_input' === $result->get_error_code() && $before === $raw_rows( $term_id ), 'The native schema did not reject the oversized key before persistence.' );
+        $store = new \WP_Native_Builder_Bridge\Support\Term_Meta_Store();
+        $direct = $store->create_unique_row( $term_id, $key, 'not-stored', static fn( $value ) => true, array( 'target_taxonomy' => $taxonomy, 'target_term_taxonomy_id' => $original_tt ) );
+        $ok( is_wp_error( $direct ) && 'term_meta_key_not_storable' === $direct->get_error_code() && $before === $raw_rows( $term_id ), 'The internal insert boundary did not enforce the native key storage length.' );
     } finally { wp_delete_term( $term_id, $taxonomy ); $term_id = 0; }
     foreach ( array( 'create', 'update', 'delete' ) as $operation ) {
         $variants = 'update' === $operation ? array( array( 'original', 'bridge' ), array( null, 'bridge' ), array( 'original', null ) ) : array( array( 'original', 'bridge' ), array( null, null ) );
