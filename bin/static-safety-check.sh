@@ -46,7 +46,7 @@ if [[ "$(grep -cF "new \\SplFileObject( \$target['canonical_path'], 'rb' )" "$so
     echo "ERROR: source editing must retain exactly one read-only advisory-lock handle on the confined target." >&2
     exit 1
 fi
-if [[ "$(grep -cF '->flock( LOCK_EX | LOCK_NB )' "$source_editor" || true)" != "1" || "$(grep -cF '->flock( LOCK_UN )' "$source_editor" || true)" != "1" ]]; then
+if [[ "$(grep -cF -- '->flock( LOCK_EX | LOCK_NB )' "$source_editor" || true)" != "1" || "$(grep -cF -- '->flock( LOCK_UN )' "$source_editor" || true)" != "1" ]]; then
     echo "ERROR: source editing must retain one non-blocking exclusive advisory lock and one explicit unlock." >&2
     exit 1
 fi
