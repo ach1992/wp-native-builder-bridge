@@ -11,10 +11,6 @@ function wpnb_issue46_assert( $condition, $message ) {
 	}
 }
 
-function wpnb_issue46_error_code( $value ) {
-	return is_wp_error( $value ) ? $value->get_error_code() : '';
-}
-
 $settings            = new Settings();
 $original_settings   = get_option( Settings::OPTION_NAME, array() );
 $original_siteurl    = get_option( 'siteurl' );
@@ -37,19 +33,20 @@ $theme_functions     = $theme_dir . '/functions.php';
 $plugin_original     = "<?php\n/*\nPlugin Name: WPNB Source Fixture\n*/\nfunction wpnb_source_fixture_value() { return 'original'; }\n";
 $helper_original     = "<?php\nfunction wpnb_source_fixture_helper() { return 'helper'; }\n";
 $theme_original      = "<?php\nfunction wpnb_source_theme_value() { return 'theme-original'; }\n";
+$external_lock       = null;
 
 try {
 	wp_mkdir_p( $plugin_dir );
 	wp_mkdir_p( $theme_dir );
+	wp_mkdir_p( $outside_plugin_dir );
 	file_put_contents( $plugin_file, $plugin_original );
 	file_put_contents( $plugin_helper, $helper_original );
 	file_put_contents( $outside_file, "<?php\n// outside fixture\n" );
-	wp_mkdir_p( $outside_plugin_dir );
 	file_put_contents( $outside_plugin_file, "<?php\n/* Plugin Name: WPNB Linked Outside Source */\n" );
-	@unlink( $linked_plugin_dir );
-	symlink( $outside_plugin_dir, $linked_plugin_dir );
 	file_put_contents( $theme_style, "/*\nTheme Name: WPNB Source Theme\nVersion: 1.0.0\n*/\n" );
 	file_put_contents( $theme_functions, $theme_original );
+	@unlink( $linked_plugin_dir );
+	symlink( $outside_plugin_dir, $linked_plugin_dir );
 	@unlink( $symlink_file );
 	symlink( $outside_file, $symlink_file );
 	chmod( $plugin_file, 0666 );
@@ -168,6 +165,27 @@ try {
 	wpnb_issue46_assert( $concurrent === file_get_contents( $plugin_file ), 'Stale apply changed the concurrent source bytes.' );
 	file_put_contents( $plugin_file, $plugin_original );
 
+	$locked_candidate = str_replace( "'original'", "'locked-attempt'", $plugin_original );
+	$locked_preview   = $preview->execute( array_merge( $target, array( 'candidate' => $locked_candidate ) ) );
+	wpnb_issue46_assert( ! is_wp_error( $locked_preview ), 'Lock-contention preview failed.' );
+	$external_lock = new SplFileObject( $plugin_file, 'rb' );
+	wpnb_issue46_assert( $external_lock->flock( LOCK_EX | LOCK_NB ), 'Could not acquire external lock fixture.' );
+	$locked_apply = $apply->execute(
+		array_merge(
+			$target,
+			array(
+				'candidate'        => $locked_candidate,
+				'preimage_sha256'  => $locked_preview['preimage_sha256'],
+				'candidate_sha256' => $locked_preview['candidate_sha256'],
+				'candidate_id'     => $locked_preview['candidate_id'],
+			)
+		)
+	);
+	wpnb_issue46_assert( is_wp_error( $locked_apply ) && 'source_edit_locked' === $locked_apply->get_error_code(), 'Source apply bypassed an existing cooperative file lock.' );
+	wpnb_issue46_assert( $plugin_original === file_get_contents( $plugin_file ), 'Lock contention changed source bytes.' );
+	$external_lock->flock( LOCK_UN );
+	$external_lock = null;
+
 	$candidate_b = str_replace( "'original'", "'candidate-b-private-marker'", $plugin_original );
 	$preview_b   = $preview->execute( array_merge( $target, array( 'candidate' => $candidate_b ) ) );
 	$applied_b   = $apply->execute(
@@ -233,7 +251,7 @@ try {
 	update_option( 'siteurl', $original_siteurl, false );
 	update_option( 'home', $original_home, false );
 
-	$theme_target    = array(
+	$theme_target = array(
 		'kind'      => 'theme',
 		'extension' => $theme_slug,
 		'file'      => 'functions.php',
@@ -255,7 +273,6 @@ try {
 	wpnb_issue46_assert( ! is_wp_error( $theme_apply ) && 'success' === $theme_apply['outcome'], 'Inactive theme source apply failed.' );
 	wpnb_issue46_assert( $theme_candidate === file_get_contents( $theme_functions ), 'Theme source apply did not persist exact candidate bytes.' );
 
-	// Recovery must never overwrite bytes newer than the candidate.
 	file_put_contents( $plugin_file, $candidate_b );
 	$recovery_record = array(
 		'version'          => 1,
@@ -276,7 +293,6 @@ try {
 	wpnb_issue46_assert( $newer === file_get_contents( $plugin_file ), 'Recovery conflict changed newer legitimate bytes.' );
 	delete_option( Source_Editing_Abilities::RECOVERY_OPTION );
 
-	// Exact owned candidate recovery is idempotent and restores only the bound preimage.
 	file_put_contents( $plugin_file, $candidate_b );
 	update_option( Source_Editing_Abilities::RECOVERY_OPTION, $recovery_record, false );
 	$recovered = $recover->execute( array( 'candidate_sha256' => $recovery_record['candidate_sha256'] ) );
@@ -284,8 +300,11 @@ try {
 	wpnb_issue46_assert( $plugin_original === file_get_contents( $plugin_file ), 'Exact recovery did not restore the preimage.' );
 	wpnb_issue46_assert( false === get_option( Source_Editing_Abilities::RECOVERY_OPTION, false ), 'Successful recovery left private recovery material behind.' );
 
-	echo "PASS: Issue #46 source editing gates, confinement, concurrency, persistence, runtime validation, recovery, MCP exposure, theme handling, and log privacy.\n";
+	echo "PASS: Issue #46 source editing gates, confinement, concurrency, locking, persistence, runtime validation, recovery, MCP exposure, theme handling, and log privacy.\n";
 } finally {
+	if ( $external_lock instanceof SplFileObject ) {
+		$external_lock->flock( LOCK_UN );
+	}
 	deactivate_plugins( $plugin, true );
 	if ( $original_theme && get_stylesheet() !== $original_theme ) {
 		switch_theme( $original_theme );
@@ -294,7 +313,6 @@ try {
 	update_option( 'home', $original_home, false );
 	update_option( Settings::OPTION_NAME, $original_settings, false );
 	delete_option( Source_Editing_Abilities::RECOVERY_OPTION );
-	delete_option( Source_Editing_Abilities::LOCK_OPTION );
 	@unlink( $symlink_file );
 	@unlink( $linked_plugin_dir );
 	@unlink( $outside_plugin_file );
