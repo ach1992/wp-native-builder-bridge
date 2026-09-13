@@ -8,6 +8,7 @@ The baseline installation registers the core Bridge surfaces below. Optional Gra
 | --- | --- | --- |
 | `bridge-info` | Site Read | Bridge/dependency state and enabled groups. |
 | `site-context` | Site Read | Bounded WordPress/theme/plugin/content-type context. |
+| `abilities-read` | Site Read | Paginated public Core/Bridge/provider contract list and exact named schema inspection; never executes target callbacks or grants permission. |
 | `integration-status` | Site Read | Optional-provider availability and observed Ability mode. |
 | `content-read` | Site Read | Read eligible posts/pages/custom post types. |
 | `content-upsert` | Builder Write | Create/update eligible content; Live Content is additionally required for live status. |
@@ -77,3 +78,15 @@ Metadata values containing PHP objects/resources at any depth, or other values t
 - `gravity-form-delete`
 
 Provider-native Abilities discovered in the WordPress registry may also be available to the MCP client. Their schemas and permissions remain owned by the provider.
+
+## Public Ability contract inspection
+
+Use `wp-native-builder/abilities-read` with `action: "list"` (the default), optional exact `namespace`, case-insensitive `search` over public name/label/description, `page` (default 1) and `per_page` (default 25, maximum 100). Results sort by exact Ability name and report `total` and `total_pages`; all pages of the current registry are reachable. The registry is a live view, not an immutable snapshot across requests.
+
+An exact `action: "get"` plus `name` returns the provider's actual input/output schemas. An absent native schema stays empty; the Bridge does not invent one. Public name, namespace, label, description, category, MCP type and the three standard boolean-or-null annotations are selected explicitly. Arbitrary provider metadata and callbacks are not returned. Explicit MCP opt-out remains authoritative for both list and exact reads, with no name-guessing bypass.
+
+Both actions require **Site Read** and native `read` authority, including when called through the official Adapter. They do not call the target's permission or execute callback. `execution_permission: "not_evaluated"` means the target's real input and current authorization must be checked at execution; public discovery or a read-only annotation is never permission. `bridge-info` remains the source for the current Bridge group settings. The current groups do not uniformly govern all reused provider-native operations; see [architecture and coverage](ARCHITECTURE.md#delegation-current-behavior-and-required-evolution).
+
+Responses are bounded to 1 MiB; an oversized or unrepresentable contract returns an explicit error, never a truncated schema. Reduce a list's page size or consult the native provider contract for a larger exact schema. Ordinary lists omit schemas and do not read object values, source files or private site data. Provider-authored public schemas/descriptions are the same public contract data the native inspection interfaces expose; providers must not embed credentials in them.
+
+This capability supplements the existing compact `site-context` reuse hints. It does not implement missing administrative workflows or grant new write/executable authority. Required coverage remains defined by `MASTER-SPEC.md`, with implementation gaps described in `ARCHITECTURE.md`.
