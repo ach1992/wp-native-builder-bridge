@@ -27,6 +27,10 @@ add_action( 'wp_abilities_api_init', static function () {
 	wp_register_ability( 'catalog-hidden/optout', $hidden );
 	$hidden['meta'] = array( 'public' => false );
 	wp_register_ability( 'catalog-hidden/private', $hidden );
+	$hidden['meta'] = array( 'public' => true, 'mcp' => 'malformed' );
+	wp_register_ability( 'catalog-hidden/malformed', $hidden );
+	$hidden['meta'] = array( 'public' => 'true' );
+	wp_register_ability( 'catalog-hidden/string-public', $hidden );
 	$empty = $base;
 	unset( $empty['input_schema'], $empty['output_schema'] );
 	wp_register_ability( 'catalog-empty/schema', $empty );

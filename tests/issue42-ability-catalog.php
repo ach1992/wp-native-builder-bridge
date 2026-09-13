@@ -126,6 +126,28 @@ $fixture->input = array( 'type' => 'string' );
 $long_name = 'unknown-provider/' . str_repeat( 'a', 300 );
 $GLOBALS['wpnb_test']['abilities'][ $long_name ] = new WPNB_Catalog_Test_Ability( $long_name );
 wpnb_catalog_assert( ! is_wp_error( $catalog->read( array( 'action' => 'get', 'name' => $long_name ) ) ), 'Valid registered names must not be rejected by an invented provider/name allowlist.' );
+$exposure_cases = array(
+	array( array( 'public' => true, 'mcp' => 'malformed' ), false ),
+	array( array( 'public' => true, 'mcp' => false ), false ),
+	array( array( 'public' => 'true' ), false ),
+	array( array( 'public' => 1 ), false ),
+	array( array( 'public' => true, 'mcp' => null ), true ),
+	array( array( 'public' => true, 'mcp' => array( 'public' => null ) ), true ),
+	array( array( 'public' => true, 'mcp' => array( 'public' => 0 ) ), false ),
+	array( array( 'public' => false, 'mcp' => array( 'public' => true ) ), true ),
+);
+$resolver = new Ability_Resolver();
+foreach ( $exposure_cases as $index => $case ) {
+	$exposure = new WPNB_Catalog_Test_Ability( 'exposure/case-' . $index );
+	$exposure->meta = $case[0];
+	$GLOBALS['wpnb_test']['abilities'][ $exposure->name ] = $exposure;
+	wpnb_catalog_assert( $case[1] === $resolver->is_mcp_exposed( $exposure ), 'Resolver disagrees with pinned Adapter exposure semantics.' );
+	$read = $catalog->read( array( 'action' => 'get', 'name' => $exposure->name ) );
+	wpnb_catalog_assert( $case[1] === ! is_wp_error( $read ), 'Exact inspection disagrees with the native exposure rule.' );
+	$found = $resolver->find( array( $exposure->name ) );
+	wpnb_catalog_assert( $case[1] === ( null !== $found ), 'Native reuse must share the same exposure rule.' );
+	unset( $GLOBALS['wpnb_test']['abilities'][ $exposure->name ] );
+}
 $GLOBALS['wpnb_test']['options'][ Settings::OPTION_NAME ] = array( Settings::GROUP_SITE_READ => 0 );
 wpnb_catalog_assert( ! $catalog->can_read() && is_wp_error( $catalog->read( array() ) ), 'Revoked Site Read must deny direct and Ability entry points.' );
 $GLOBALS['wpnb_test']['options'][ Settings::OPTION_NAME ] = $settings->defaults();

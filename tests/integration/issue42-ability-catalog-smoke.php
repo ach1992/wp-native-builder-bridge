@@ -35,9 +35,15 @@ try {
 	wpnb_issue42_assert( ! is_wp_error( $empty_schema ) && array() === $empty_schema['items'][0]['input_schema'] && array() === $empty_schema['items'][0]['output_schema'], 'Absent native schemas were not preserved.' );
 	$large_schema = $catalog->execute( array( 'action' => 'get', 'name' => 'catalog-large/schema' ) );
 	wpnb_issue42_assert( is_wp_error( $large_schema ) && 'ability_catalog_response_too_large' === $large_schema->get_error_code(), 'Oversized contract must fail rather than truncate.' );
+	foreach ( array( 'catalog-hidden/malformed', 'catalog-hidden/string-public', 'catalog-hidden/optout', 'catalog-fixture/operation-000' ) as $probe_name ) {
+		$probe = wp_get_ability( $probe_name );
+		$native_public = \WP\MCP\Abilities\McpAbilityExposure::is_public( $probe );
+		$bridge_public = ( new \WP_Native_Builder_Bridge\Abilities\Ability_Resolver() )->is_mcp_exposed( $probe );
+		wpnb_issue42_assert( $native_public === $bridge_public, 'Bridge exposure must match the pinned Adapter on the actual registered object.' );
+	}
 	$hidden_list = $catalog->execute( array( 'namespace' => 'catalog-hidden' ) );
 	wpnb_issue42_assert( 0 === $hidden_list['total'], 'Hidden provider contracts leaked in list.' );
-	foreach ( array( 'catalog-hidden/private', 'catalog-hidden/optout', 'catalog-missing/name' ) as $name ) {
+	foreach ( array( 'catalog-hidden/private', 'catalog-hidden/optout', 'catalog-hidden/malformed', 'catalog-hidden/string-public', 'catalog-missing/name' ) as $name ) {
 		$result = $catalog->execute( array( 'action' => 'get', 'name' => $name ) );
 		wpnb_issue42_assert( is_wp_error( $result ) && 'ability_contract_not_found' === $result->get_error_code(), 'Hidden and unknown names must have the same error.' );
 	}
