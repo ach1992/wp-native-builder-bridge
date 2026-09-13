@@ -18,13 +18,15 @@ use WP_Error;
 final class Source_Editing_Abilities {
 	const MAX_SOURCE_BYTES = 2097152;
 	const RECOVERY_OPTION  = 'wp_native_builder_bridge_source_recovery';
-	const LOCK_OPTION      = 'wp_native_builder_bridge_source_lock';
 
 	/** @var Permissions */
 	private $permissions;
 
 	/** @var Mutation_Log */
 	private $log;
+
+	/** @var \SplFileObject|null */
+	private $file_lock;
 
 	/**
 	 * Creates the provider.
@@ -35,6 +37,7 @@ final class Source_Editing_Abilities {
 	public function __construct( Permissions $permissions, Mutation_Log $log ) {
 		$this->permissions = $permissions;
 		$this->log         = $log;
+		$this->file_lock   = null;
 	}
 
 	/**
@@ -295,11 +298,11 @@ final class Source_Editing_Abilities {
 			return new WP_Error( 'source_recovery_required', __( 'A previous source edit still owns pending recovery material. Recover or reconcile it before another source write.', 'wp-native-builder-bridge' ), array( 'outcome' => 'recovery_required' ) );
 		}
 
-		$token = wp_generate_uuid4();
-		if ( ! $this->state_add( self::LOCK_OPTION, $token ) ) {
-			return new WP_Error( 'source_edit_locked', __( 'Another Bridge source edit is already in progress.', 'wp-native-builder-bridge' ) );
+		$locked = $this->acquire_file_lock( $target );
+		if ( is_wp_error( $locked ) ) {
+			return $locked;
 		}
-		register_shutdown_function( array( $this, 'shutdown_recover' ), $token );
+		$token = wp_generate_uuid4();
 
 		try {
 			$locked_target = $this->resolve_target_from_input( $input );
@@ -325,6 +328,7 @@ final class Source_Editing_Abilities {
 			if ( ! $this->state_add( self::RECOVERY_OPTION, $record ) ) {
 				return new WP_Error( 'source_recovery_required', __( 'Recovery material already exists for another source edit.', 'wp-native-builder-bridge' ), array( 'outcome' => 'recovery_required' ) );
 			}
+			register_shutdown_function( array( $this, 'shutdown_recover' ), $token );
 
 			if ( function_exists( 'ignore_user_abort' ) ) {
 				ignore_user_abort( true );
@@ -366,7 +370,7 @@ final class Source_Editing_Abilities {
 				'control_plane_risk' => $target['control_plane_risk'],
 			);
 		} finally {
-			$this->release_lock( $token );
+			$this->release_file_lock();
 		}
 	}
 
@@ -393,12 +397,13 @@ final class Source_Editing_Abilities {
 			return new WP_Error( 'source_recovery_identity_required', __( 'Recovery requires the exact pending candidate hash.', 'wp-native-builder-bridge' ), array( 'outcome' => 'conflict' ) );
 		}
 
-		$lock = $this->state_get( self::LOCK_OPTION, false );
-		if ( false !== $lock && (string) $lock !== (string) $record['token'] ) {
-			return new WP_Error( 'source_edit_locked', __( 'Another Bridge source edit is already in progress.', 'wp-native-builder-bridge' ) );
+		$target = $this->resolve_record_target( $record );
+		if ( is_wp_error( $target ) ) {
+			return new WP_Error( 'source_recovery_target_changed', __( 'The pending source recovery target changed and cannot be restored automatically.', 'wp-native-builder-bridge' ), array( 'outcome' => 'recovery_required' ) );
 		}
-		if ( false === $lock && ! $this->state_add( self::LOCK_OPTION, (string) $record['token'] ) ) {
-			return new WP_Error( 'source_edit_locked', __( 'Another Bridge source edit is already in progress.', 'wp-native-builder-bridge' ) );
+		$locked = $this->acquire_file_lock( $target );
+		if ( is_wp_error( $locked ) ) {
+			return $locked;
 		}
 
 		try {
@@ -413,7 +418,7 @@ final class Source_Editing_Abilities {
 				'preimage_sha256' => (string) $record['preimage_sha256'],
 			);
 		} finally {
-			$this->release_lock( (string) $record['token'] );
+			$this->release_file_lock();
 		}
 	}
 
@@ -428,7 +433,7 @@ final class Source_Editing_Abilities {
 		if ( is_array( $record ) && ! empty( $record['token'] ) && hash_equals( (string) $record['token'], (string) $token ) ) {
 			$this->restore_record( $record );
 		}
-		$this->release_lock( $token );
+		$this->release_file_lock();
 	}
 
 	/** @return bool */
@@ -678,6 +683,47 @@ final class Source_Editing_Abilities {
 	}
 
 	/**
+	 * Acquires a process-scoped advisory lock on the exact confined source file.
+	 *
+	 * The OS releases the lock automatically when the PHP process exits, including
+	 * abrupt termination. The persistent recovery record remains the crash-recovery
+	 * owner once a write can begin.
+	 *
+	 * @param array<string,mixed> $target Resolved target.
+	 * @return true|WP_Error
+	 */
+	private function acquire_file_lock( $target ) {
+		if ( $this->file_lock instanceof \SplFileObject ) {
+			return new WP_Error( 'source_edit_locked', __( 'Another Bridge source edit is already in progress.', 'wp-native-builder-bridge' ) );
+		}
+
+		try {
+			$lock = new \SplFileObject( $target['canonical_path'], 'rb' );
+		} catch ( \RuntimeException $error ) {
+			return new WP_Error( 'source_lock_unavailable', __( 'Bridge could not acquire a cooperative lock for the exact source file.', 'wp-native-builder-bridge' ) );
+		}
+
+		if ( ! $lock->flock( LOCK_EX | LOCK_NB ) ) {
+			return new WP_Error( 'source_edit_locked', __( 'Another Bridge source edit is already in progress.', 'wp-native-builder-bridge' ) );
+		}
+		$this->file_lock = $lock;
+		return true;
+	}
+
+	/**
+	 * Releases the current process-scoped advisory lock.
+	 *
+	 * @return void
+	 */
+	private function release_file_lock() {
+		if ( ! $this->file_lock instanceof \SplFileObject ) {
+			return;
+		}
+		$this->file_lock->flock( LOCK_UN );
+		$this->file_lock = null;
+	}
+
+	/**
 	 * Writes exact bytes through WordPress direct filesystem only.
 	 *
 	 * @param array<string,mixed> $target Resolved target.
@@ -851,18 +897,10 @@ final class Source_Editing_Abilities {
 		return $this->state_delete( self::RECOVERY_OPTION );
 	}
 
-	/** @param string $token Token. @return void */
-	private function release_lock( $token ) {
-		$current = $this->state_get( self::LOCK_OPTION, false );
-		if ( false !== $current && hash_equals( (string) $current, (string) $token ) ) {
-			$this->state_delete( self::LOCK_OPTION );
-		}
-	}
-
 	/**
 	 * Reads private source-editing state from a scope shared by all sites in a network.
 	 *
-	 * @param string $name    Option name.
+	 * @param string $name     Option name.
 	 * @param mixed  $fallback Default value.
 	 * @return mixed
 	 */
