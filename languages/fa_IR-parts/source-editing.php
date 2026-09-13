@@ -15,6 +15,7 @@ return array(
 	'The exact installed source file is not directly writable by the WordPress PHP process. Bridge does not collect FTP or SSH filesystem credentials.' => 'فایل دقیق کد منبع نصب‌شده مستقیماً توسط فرایند PHP وردپرس قابل نوشتن نیست. Bridge اطلاعات ورود FTP یا SSH برای فایل‌سیستم دریافت نمی‌کند.',
 	'A previous source edit still owns pending recovery material. Recover or reconcile it before another source write.' => 'یک ویرایش قبلی کد منبع هنوز داده بازیابی در انتظار دارد. پیش از نوشتن مجدد، آن را بازیابی یا تعیین تکلیف کنید.',
 	'Another Bridge source edit is already in progress.' => 'یک ویرایش دیگر کد منبع توسط Bridge در حال انجام است.',
+	'Bridge could not acquire a cooperative lock for the exact source file.' => 'Bridge نتوانست قفل هماهنگ‌سازی فایل را برای فایل دقیق کد منبع دریافت کند.',
 	'The installed source target changed before the write could begin.' => 'هدف کد منبع نصب‌شده پیش از شروع نوشتن تغییر کرد.',
 	'The installed source file changed before the write could begin.' => 'فایل کد منبع نصب‌شده پیش از شروع نوشتن تغییر کرد.',
 	'Recovery material already exists for another source edit.' => 'داده بازیابی برای یک ویرایش دیگر کد منبع از قبل وجود دارد.',
