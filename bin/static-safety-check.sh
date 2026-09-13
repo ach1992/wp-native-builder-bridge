@@ -13,7 +13,7 @@ fi
 media_write_count="$(grep -cF 'file_put_contents( $tmp_name, $bytes )' src/Abilities/class-media-abilities.php || true)"
 media_temp_count="$(grep -cF 'wp_tempnam( $filename )' src/Abilities/class-media-abilities.php || true)"
 media_base64_temp_count="$(grep -cF '$tmp_name = wp_tempnam( $filename );' src/Abilities/class-media-abilities.php || true)"
-media_import_temp_count="$(grep -cF '$temp_file = wp_tempnam( $filename );' src/Abilities/class-media-abilities.php || true)"
+media_import_temp_count="$(grep -Ec '\$temp_file[[:space:]]*=[[:space:]]*wp_tempnam\([[:space:]]*\$filename[[:space:]]*\);' src/Abilities/class-media-abilities.php || true)"
 media_all_write_count="$(grep -cF 'file_put_contents(' src/Abilities/class-media-abilities.php || true)"
 if [[ "$media_write_count" != "1" || "$media_all_write_count" != "1" || "$media_temp_count" != "2" || "$media_base64_temp_count" != "1" || "$media_import_temp_count" != "1" ]]; then
     echo "ERROR: media upload filesystem exception no longer matches the single bounded WordPress temp-file write." >&2
