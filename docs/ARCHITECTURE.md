@@ -1,80 +1,97 @@
 # Architecture
 
-## Runtime path
+## Normative source and implementation boundary
 
-The supported direct ChatGPT path is:
+[`MASTER-SPEC.md`](../MASTER-SPEC.md) defines the product goal: full legitimate WordPress administration, discoverable and delegable through simple administrator-controlled settings. This document refines that specification and describes the actual component boundaries and outstanding coverage. Neither the current tool inventory nor a task's exclusions are a permanent product ceiling.
+
+The architecture is deliberately small. Reuse WordPress identity/capabilities, registered Abilities, the official MCP Adapter, the existing Bridge settings and permission service, and thin public-API fallbacks. Do not create a second registry, policy language, per-provider permission engine, generic execution framework, or helper-plugin bundle.
+
+## Runtime ownership
 
 ```text
-ChatGPT Workspace App
-  -> public HTTPS MCP endpoint
-  -> WordPress-backed OAuth 2.1
-  -> official WordPress MCP Adapter HttpTransport
+AI / MCP client
+  -> authenticated Bridge HTTPS endpoint
+  -> official MCP Adapter transport and discovery/execution tools
   -> WordPress Abilities registry
-     -> stable provider/Core abilities when available
-     -> Bridge abilities for supported gaps
-  -> WordPress / Gutenberg / optional integrations
+       -> Core/provider-owned public contracts
+       -> Bridge-owned typed fallback contracts
+  -> the operation's actual WordPress/provider API and authorization
 ```
 
-The normal WordPress installation therefore requires only the official MCP Adapter and WP Native Builder Bridge.
+| Responsibility | Existing owner | Boundary |
+| --- | --- | --- |
+| Connection identity and revocation | `src/Auth/class-oauth-server.php`, `class-oauth-store.php` | WordPress-backed OAuth, resource/client binding, current WordPress principal; no separate AI superuser. |
+| Native registry and invocation | WordPress Abilities API and official MCP Adapter | Native schemas, permission callbacks and lifecycle remain authoritative. |
+| Exposure compatibility and reuse | `src/Abilities/class-ability-resolver.php` | Explicit MCP opt-out takes precedence over general public metadata. |
+| Paginated public contract inspection | `src/Abilities/class-ability-catalog-abilities.php` | Read-only list/detail; no operation or target permission callback is invoked. |
+| Bridge delegation settings | `src/Support/class-settings.php`, `class-permissions.php` | Small default-off groups plus actual WordPress authority, checked at execution. |
+| Typed administration | Existing providers under `src/Abilities/` | Object-specific inputs, capabilities, lifecycle, error and integrity behavior. |
+| Exact metadata persistence | `src/Support/class-post-meta-store.php` | Fixed-purpose, fixed-schema row identity/CAS; not a generic database API. |
+| Persistent Workspace | `src/Workspace/class-store.php`, Workspace abilities and admin screens | Private native storage, version/hash concurrency, dedicated administration. |
+| Activity | `src/Support/class-mutation-log.php` | Bounded identity/outcome metadata, never request bodies or secrets. |
 
-## Discovery-first provider architecture
+Production requires the official Adapter and this Bridge, not Composer, Docker, Node.js, a daemon, another database, or an external identity platform. Build and integration tooling remain development-only.
 
-WP Native Builder Bridge is intentionally **provider-agnostic by default**. Installing another plugin or theme must not automatically create a maintenance requirement in the Bridge.
+## Discovery and reuse
 
-The canonical resolution order is:
+Use the native registry as the one operation inventory. Prefer a suitable Core/provider Ability with its real public contract. Otherwise use a supported public WordPress/provider API, including an appropriate registered REST contract, through the smallest typed fallback needed for the actual gap. Only a proven public contract justifies a provider-specific fallback. Keep such fallbacks removable when upstream publishes a suitable native Ability.
 
-```text
-Discover registered WordPress Abilities at runtime
-  -> reuse a suitable Core/plugin/theme Ability through its public contract
-  -> otherwise use a bounded Bridge surface backed by a supported public WordPress/provider API
-  -> add provider-specific fallback code only for a real capability gap with a stable documented contract
-  -> otherwise report the surface as unavailable
-```
+Do not infer execution compatibility or authority from names, descriptions, category names, or read-only annotations. A provider explicitly hiding its native Ability is not permission to expose an equivalent lower-level fallback. Unknown/private business behavior needs a verified implementation path, not guessed storage mutation.
 
-Provider-owned Abilities take precedence over Bridge fallbacks. A fallback must not be registered in parallel when the provider already exposes the relevant native Ability surface, including when that provider surface is intentionally hidden from MCP.
+`bridge-info` reports dependencies and enabled Bridge groups. `site-context` preserves its compact installation context and first-50 external reuse hints. `abilities-read` supplements it with sorted, filtered, paginated public Core/Bridge/provider contracts and exact named schema reads. It excludes non-public and explicitly MCP-hidden contracts and does not return arbitrary provider metadata. The shared resolver matches the pinned Adapter: malformed MCP metadata is denied, explicit non-null MCP public flags take precedence, and an inherited general public flag must be exactly boolean true.
 
-This architecture aims for **maximum practical capability coverage with minimum provider-specific code**. A future plugin or theme that registers compatible public WordPress Abilities should normally become usable through discovery without editing Bridge source. Provider-specific code is an exception and must justify its implementation, security, compatibility, and long-term maintenance cost.
+Contract inspection always reports `execution_permission: not_evaluated`. A schema is not permission, and a target-specific provider callback cannot safely be evaluated without its real valid input. Native permission checks still run when the operation is executed. Bounded errors replace oversized/unrepresentable inspection output; schemas are never silently truncated.
 
-The Bridge does not guess private APIs, storage layouts, capability names, or admin-screen behavior. If neither a suitable Ability nor a supported public API exists, explicit unavailability is safer than brittle introspection.
+The broader specification also requires actionable delegation/effect/availability diagnostics. This public-contract increment does not yet infer arbitrary provider capabilities, classify every effect, or provide complete per-target permission diagnostics. Those remain explicit implementation gaps, not fabricated discovery fields.
 
-## Capability coverage is not privilege escalation
+## Delegation: current behavior and required evolution
 
-Broad discovery does not grant authority. Every operation remains subject to the authorization layers that own it:
+**Current implementation:** Bridge-owned operations enforce their documented groups and native capabilities. The Bridge's direct server exposes the Adapter's native discover/get-info/execute tools. Reused provider Abilities retain their own WordPress permission callbacks, but the existing Bridge groups do not uniformly gate every provider-native operation. Disabling a Bridge write group must not be advertised as revoking all provider-native writes.
 
-- the authenticated WordPress user and their effective WordPress/provider capabilities;
-- the provider Ability's own permission callback when a native Ability is reused;
-- explicit Bridge access groups for Bridge-owned operations;
-- object-level checks and any operation-specific safety requirements.
+**Required evolution:** extend the existing policy/execution boundary so delegated access is understandable and enforceable for every operation reached through the Bridge, including native provider operations and any future registered-REST fallback. Preserve provider callbacks and the authenticated principal's actual authority. Do not infer trusted effect classes from arbitrary provider prose/annotations, introduce provider allowlists, or silently expand consent on upgrade. Unclassified operations need an honest administrator decision/explicit trust boundary rather than an invented safe category.
 
-Enabling a Bridge access group never grants a WordPress or provider capability the connected user does not already have. Discovery determines **what supported operations exist**; authorization determines **which of those operations this user may execute**.
+Inspection and execution must consume the same effective policy when that extension is implemented; copied registry snapshots or old discovery results must not authorize execution after revocation. Ordinary data/provider routes must not self-enable their own Bridge access. Executable code remains an explicit elevated trust grant, not a sandbox that can guarantee containment of intentionally authorized PHP.
 
-## Provider examples
+Use existing WordPress roles/capabilities for identity and object authority; use Bridge settings for delegation. Adding an authenticated connection must not implicitly grant administrator or network authority. Capability changes, disconnection and policy revocation must be checked against current state.
 
-- **Astra / Astra Pro:** when Astra registers public `astra/*` Abilities, the Bridge discovers and reuses them. It does not maintain duplicate Astra tools.
-- **Gravity Forms:** native `gravityforms/*` Abilities take precedence. When no native Gravity Forms Ability surface is registered and documented `GFAPI` is available, the Bridge may expose a bounded fallback. That fallback must use Gravity Forms' documented authorization contract rather than invented capability names.
-- **Future unknown provider:** if a plugin or theme registers compatible public Abilities, discovery should make those operations available without a Bridge source change.
-- **Provider without a usable Ability or public API:** the capability remains unavailable rather than being implemented through private internals or guessed contracts.
+## Administrative coverage and remaining gaps
 
-The Gravity Forms fallback permission regression tracked in issue #27 is the concrete reason for the last rule: the provider has no `gravityforms_view_forms` capability, while form-definition reads use the documented `gravityforms_edit_forms` authorization contract. Provider-specific fallbacks therefore must follow the provider's supported API and permission model exactly.
+This table is a code-backed capability inventory, not a roadmap schedule or a live task ledger. `Implemented` means a typed contract exists, not that its access is enabled or that the current user may execute it. The list is non-exhaustive and does not redefine the root specification. Update the relevant row when a tested implementation reaches the target branch; active work and ordering belong in GitHub Issues/PRs.
 
-## Ability layer
+| Family | Implemented entry points / owner | Remaining coverage against the specification |
+| --- | --- | --- |
+| Context and discovery | `bridge-info`, `site-context`, `integration-status`, `abilities-read`; native Adapter discovery | Uniform provider delegation, effect/delegation diagnostics and input-dependent availability explanations. |
+| Content and revisions | `class-content-abilities.php`, `class-content-eligibility.php` | Administration of objects with different private/internal lifecycles must use appropriate contracts rather than widening ordinary authoring blindly. |
+| Blocks and appearance | `class-block-abilities.php`, `class-navigation-abilities.php`; compatible theme/provider Abilities | Generic widget/template/style administration and authoritative editor-serialization or staged-theme workflows where upstream supports them. PHP parse/serialize is not editor validation. |
+| Media | `class-media-abilities.php`: inspection, Base64 upload, metadata update and deletion | Explicit URL import and additional validated file workflows; do not confuse a missing URL operation with a disabled permission. |
+| Taxonomies and metadata | `class-taxonomy-abilities.php`; generic `post-meta-*` with protected-key opt-in and physical-state integrity | Exact-taxonomy generic term metadata; user/comment metadata with distinct authorization. No provider/key allowlists. |
+| Configuration | `class-site-config-abilities.php`: bounded site-setting fields; compatible provider Abilities | Broader registered site/network/theme/provider settings and explicit semantics for unregistered settings. The current field list is not a permanent product policy. |
+| Extensions and source | `class-extension-abilities.php`: installed inventory and WordPress.org lifecycle; optional managed snippets | Separately consented uploaded/URL package sources and installed plugin/theme source read/preview/apply/recovery. |
+| Users and access | `class-user-abilities.php`: bounded users/roles, account upsert/removal | Wider role/capability, membership, session and authentication lifecycle with real delegable authority; no generic secret dumping. |
+| Comments | No Bridge-owned moderation contract yet; compatible provider contracts may exist | Native comment inspection, moderation/replies/status/deletion and comment metadata. |
+| Tools and maintenance | Environment inspection and any compatible installed-provider Ability | Supported import/export, scheduled tasks, maintenance/cache and backup/restore workflows, without a raw shell or database console. |
+| Provider business administration | Native public Abilities; verified Gravity Forms and Code Snippets fallbacks | Additional installed-provider workflows through their real public lifecycle; generic post metadata is not a replacement for commerce/order or private provider storage. |
+| Multisite | Existing operations remain subject to native WordPress authority | Explicit site/network administration and delegation, with real Super Admin/site boundaries and dedicated tests. |
+| Persistent Workspace | `workspace-resume`, `workspace-document`, `workspace-task` and admin lifecycle | Preserve version/hash guarantees and dedicated privacy boundaries as coverage grows. |
 
-Bridge abilities use closed schemas and explicit permission callbacks. Major surfaces are separated by concern: content, blocks, media, taxonomy, navigation, site configuration, extensions, users, integrations, and Workspace.
+## Integrity and lifecycle
 
-Discovery and execution are separate concerns. `wp-native-builder/integration-status` reports supported optional-provider modes, while the WordPress/MCP Ability registry remains the authoritative runtime source for actual provider Abilities.
+Use the operation's owning API, not a generic storage write that bypasses business validation. Registered metadata authorization and additional mapped capabilities remain authoritative. The protected-unregistered metadata opt-in is deliberately narrow: exact target authority, enabled Advanced Metadata, no explicit provider denial, no credential-like key, and lossless single-row state.
 
-## Persistent Workspace
+Existing post metadata updates/deletes use exact physical-row identity and byte-exact conditional persistence. Compensate only the current invocation's own unchanged row; never overwrite newer state to manufacture success. Share policy code where semantics are identical, but keep object-specific authority and lifecycle separate when extending terms, users or comments.
 
-Workspace documents and tasks use private WordPress-native object storage and dedicated abilities. Internal Workspace object types are excluded from generic content/Gutenberg operations.
+For content/blocks/Workspace and future settings/files, use the current-state identity appropriate to overwrite risk. Preserve revisions where native, verify persistence, and describe partial failure/recovery accurately. Workspace internals remain inaccessible through unrelated content/meta operations but manageable through dedicated Workspace contracts.
 
-Current-state concurrency does not depend on WordPress revision retention. Document/task mutations use Bridge-owned version/hash identity and atomic metadata compare-and-swap semantics.
+## Network, package and source workflows
 
-## Direct OAuth
+These are required coverage, not yet a claim that every workflow is implemented. Use explicit default-off consent for materially new outbound or executable authority on fresh install and upgrade. Media import uses safe bounded streaming and normal MIME/attachment handling; it cannot install executable packages. Package installation uses its own WordPress installer/lifecycle and provenance/target checks, without a permanent WordPress.org-only policy.
 
-The direct endpoint publishes protected-resource and authorization-server metadata, validates the ChatGPT OAuth client metadata contract, uses Authorization Code + PKCE S256, binds the MCP resource, issues short-lived access tokens, rotates refresh tokens, and supports revocation.
+Source editing must resolve an installed extension and a WordPress-editable relative file, enforce exact file-edit capabilities and deployment restrictions, reject traversal/symlink escapes, preview exact previous/candidate bytes, persist with stale-state protection, and provide a private preimage/recovery path. Verify the actual Core editor API's loopback authentication, active/inactive/network behavior and rollback ownership before reuse. A nonce is not substitute authentication, and restoring a file does not undo PHP side effects.
 
-The OAuth identity resolves back to a WordPress user so WordPress capabilities remain authoritative.
+Hooks, custom plugins and child themes remain preferable for routine customization; they are guidance rather than a blanket ban on an explicitly authorized vendor-file change. Editing the Bridge/Adapter itself requires an exact connection-loss and independently reachable recovery plan, not a hidden provider blacklist.
 
-## Deployment model
+## Validation and evolution
 
-Production runtime has no dependency on Composer, Node.js, Docker, a tunnel process, or an external identity-provider plugin. Development tooling and Docker integration tests are repository-only dependencies.
+For each increment, retain existing quality/static checks, test negative permissions and revocation as well as success, verify real WordPress behavior on both supported integration lanes, and exercise the actual Adapter contract. Add fixture providers/custom targets rather than assuming a named vendor defines coverage. High-risk execution surfaces need independent exact-candidate review and the applicable integration/production gates.
+
+Update the root specification only for accepted product-level changes. Refine this architecture and public operation documentation when implementation changes. Keep task scope, current candidates, CI results, ownership and blockers in GitHub, not in parallel manager-memory documents. Missing capabilities remain tracked conformance gaps; completing one increment is not full administrator parity.

@@ -53,6 +53,8 @@ final class Registrar {
 	 * @var Site_Abilities
 	 */
 	private $site_abilities;
+	/** @var Ability_Catalog_Abilities */
+	private $catalog_abilities;
 
 	/**
 	 * Generic content provider.
@@ -126,6 +128,7 @@ final class Registrar {
 		$this->resolver                = new Ability_Resolver();
 		$mutation_log                  = new Mutation_Log();
 		$this->site_abilities          = new Site_Abilities( $this->resolver, $this->permissions );
+		$this->catalog_abilities       = new Ability_Catalog_Abilities( $this->resolver, $this->permissions );
 		$this->content_abilities       = new Content_Abilities( $this->permissions, $mutation_log );
 		$this->post_meta_abilities     = new Post_Meta_Abilities( $this->permissions, $mutation_log );
 		$this->block_abilities         = new Block_Abilities( $this->permissions, $mutation_log );
@@ -219,6 +222,7 @@ final class Registrar {
 		);
 
 		$this->site_abilities->register();
+		$this->catalog_abilities->register();
 		$this->content_abilities->register();
 		$this->post_meta_abilities->register();
 		$this->block_abilities->register();
