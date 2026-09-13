@@ -4,7 +4,7 @@ WP Native Builder Bridge is designed as a bounded WordPress capability layer, no
 
 ## Layered authorization
 
-A successful operation must satisfy every applicable layer:
+Bridge-owned operations must satisfy every applicable layer:
 
 1. valid OAuth-authenticated WordPress identity for direct ChatGPT connections;
 2. the relevant Bridge access group;
@@ -12,7 +12,7 @@ A successful operation must satisfy every applicable layer:
 4. any provider-native permission check used by an integration;
 5. operation-specific live-state, destructive, and stale-state rules.
 
-OAuth never enables a Bridge access group and never grants a WordPress capability.
+OAuth never enables a Bridge access group and never grants a WordPress capability. Native provider operations retain their own permission callbacks; current Bridge groups do not uniformly govern provider-native execution. See [current delegation coverage](ARCHITECTURE.md#delegation-current-behavior-and-required-evolution); disabling a Bridge write group is not universal provider-write revocation.
 
 ## Access groups
 

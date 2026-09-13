@@ -71,8 +71,9 @@ try {
 		}
 	}
 	sort( $names );
-	wpnb_issue5_assert( 34 === count( $names ), 'Baseline Bridge registry must contain exactly 34 abilities without optional provider fallbacks.' );
-	wpnb_issue5_assert( 34 === count( array_unique( $names ) ), 'Bridge ability names are not unique.' );
+	wpnb_issue5_assert( in_array( 'wp-native-builder/media-import-url', $names, true ) && in_array( 'wp-native-builder/abilities-read', $names, true ), 'Both new independent abilities must survive integration.' );
+	wpnb_issue5_assert( 35 === count( $names ), 'Baseline Bridge registry must contain exactly 35 abilities without optional provider fallbacks.' );
+	wpnb_issue5_assert( 35 === count( array_unique( $names ) ), 'Bridge ability names are not unique.' );
 
 	$defaults = $settings->defaults();
 	wpnb_issue5_assert( 1 === $defaults[ Settings::GROUP_SITE_READ ], 'Site Read is not the sole enabled default group.' );
