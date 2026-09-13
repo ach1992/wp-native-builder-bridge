@@ -80,6 +80,7 @@ Bridge permissions are additive to normal WordPress capabilities. Enabling a Bri
 | --- | --- |
 | **Site Read** | Inspect site information, content, media, navigation, extensions, integrations, and Workspace state. |
 | **Builder Write** | Create and update drafts, content, Gutenberg blocks, media, taxonomies, navigation, forms, and Workspace objects. |
+| **Remote Media** | Import safe HTTP(S) media into the Media Library; Builder Write and native upload authority are also required. |
 | **Live Content** | Permit publishing and other live-content status changes when WordPress also permits them. |
 | **Site Configuration** | Permit bounded global WordPress/theme configuration changes. |
 | **Advanced Metadata** | Permit generic read/update of protected/private post metadata for post objects the connected user may edit, including private/non-REST CPTs; credential-like keys, options, user meta, and Workspace internals remain excluded. |
@@ -91,6 +92,8 @@ Only **Site Read** is enabled by default.
 ## Uploads and extension installation
 
 `wp-native-builder/media-upload` accepts file bytes plus a filename and hands them to WordPress Media Library handling. The maximum payload is the smaller of the WordPress upload limit and **20 MiB**. The caller cannot choose a server filesystem path.
+
+`wp-native-builder/media-import-url` accepts a public HTTP(S) URL and a filename, streams it within the current WordPress upload limit, and creates a normal attachment. It requires explicit **Remote Media** plus **Builder Write** access; upgrades do not enable it automatically. See [URL media import](./docs/ABILITIES.md#url-media-import).
 
 Plugin/theme installation is deliberately narrower: it accepts WordPress.org slugs through WordPress administration APIs. The Bridge does **not** expose arbitrary ZIP/PHP upload, arbitrary package URLs, shell commands, SQL, generic filesystem access, arbitrary WordPress options/user-meta administration, or credential retrieval.
 

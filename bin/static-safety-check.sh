@@ -12,8 +12,23 @@ fi
 
 media_write_count="$(grep -cF 'file_put_contents( $tmp_name, $bytes )' src/Abilities/class-media-abilities.php || true)"
 media_temp_count="$(grep -cF 'wp_tempnam( $filename )' src/Abilities/class-media-abilities.php || true)"
-if [[ "$media_write_count" != "1" || "$media_temp_count" != "1" ]]; then
+media_base64_temp_count="$(grep -cF '$tmp_name = wp_tempnam( $filename );' src/Abilities/class-media-abilities.php || true)"
+media_import_temp_count="$(grep -cF '$temp_file = wp_tempnam( $filename );' src/Abilities/class-media-abilities.php || true)"
+media_all_write_count="$(grep -cF 'file_put_contents(' src/Abilities/class-media-abilities.php || true)"
+if [[ "$media_write_count" != "1" || "$media_all_write_count" != "1" || "$media_temp_count" != "2" || "$media_base64_temp_count" != "1" || "$media_import_temp_count" != "1" ]]; then
     echo "ERROR: media upload filesystem exception no longer matches the single bounded WordPress temp-file write." >&2
+    exit 1
+fi
+
+# URL media uses a second WordPress staging allocation, never another direct writer,
+# an unchecked HTTP client, or a caller-controlled filesystem/command primitive.
+media_forbidden='(^|[^[:alnum:]_])(shell_exec|exec|system|passthru|proc_open|popen|eval|fopen|fwrite|unlink|rename|copy|mkdir|rmdir|curl_exec|curl_init|fsockopen|stream_socket_client|file_get_contents|wp_remote_get|wp_remote_post|wp_remote_request)[[:space:]]*\('
+if grep -nE "$media_forbidden" src/Abilities/class-media-abilities.php; then
+    echo "ERROR: media import introduced an unbounded execution/filesystem/HTTP primitive." >&2
+    exit 1
+fi
+if [[ "$(grep -cF 'wp_safe_remote_get(' src/Abilities/class-media-abilities.php || true)" != "1" ]]; then
+    echo "ERROR: media import must retain exactly one safe WordPress HTTP request surface." >&2
     exit 1
 fi
 

@@ -18,6 +18,7 @@ OAuth never enables a Bridge access group and never grants a WordPress capabilit
 
 - **Site Read** — read-only inspection surfaces.
 - **Builder Write** — bounded content/site-building mutations.
+- **Remote Media** - default-off outbound media import; Builder Write and native upload/parent authority remain required.
 - **Live Content** — publishing and other live-state transitions.
 - **Site Configuration** — bounded global configuration.
 - **Advanced Metadata** — protected/private post metadata for WordPress post objects the connected user may edit; disabled by default and intentionally separate from ordinary Site Read/Builder Write access.
@@ -74,6 +75,14 @@ Generic content/Gutenberg operations remain limited to their existing eligible e
 Media upload accepts bytes and a filename, writes only to a WordPress-generated temporary path, and hands the result to WordPress media/sideload handling. The caller cannot specify a server filesystem path.
 
 The payload cap is the smaller of the WordPress upload limit and 20 MiB.
+
+## Remote media boundary
+
+URL import is separately default-off, including upgrades where Builder Write was already enabled. It uses native safe HTTP(S) URL/redirect validation and TLS verification without relaxing WordPress security filters. Requests stream to a WordPress-owned staging file with a finite timeout, redirect budget, and current upload-limit-plus-one byte cap. WordPress then owns MIME/sideload/attachment handling. Neither arbitrary request headers/cookies nor caller-chosen server paths are accepted.
+
+Authority is rechecked before network activity and before file/attachment mutation. Ordinary failures remove staging files; failed attachment insertion or revoked authority after sideload removes only the newly uploaded destination. The importer rejects executable filenames and never performs package extraction/installation. Expected errors are redacted rather than forwarding provider/HTTP messages containing signed URLs, response bodies or filesystem paths. Mutation logs contain only operation/attachment identity, success and a bounded error code.
+
+This contract does not make imports transactional or retries idempotent. A process crash or arbitrary provider hook can have effects beyond temporary-file cleanup. Core networking and installed filters remain authoritative; native safe HTTP is not a promise of isolation from malicious PHP or a replacement for deployment egress restrictions.
 
 ## Extension boundary
 
