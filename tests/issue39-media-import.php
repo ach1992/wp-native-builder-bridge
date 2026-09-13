@@ -39,6 +39,7 @@ function wp_safe_remote_get( $url, $args ) {
 	file_put_contents( $args['filename'], substr( $GLOBALS['wpnb39']['payload'], 0, $args['limit_response_size'] ) );
 	if ( 'revoke_http' === $GLOBALS['wpnb39']['mode'] ) { $GLOBALS['wpnb_test']['options'][ Settings::OPTION_NAME ]['remote_media'] = 0; }
 	if ( 'missing_staging' === $GLOBALS['wpnb39']['mode'] ) { wp_delete_file( $args['filename'] ); }
+	if ( 'http_throw' === $GLOBALS['wpnb39']['mode'] ) { throw new RuntimeException( 'private-token ' . $url . ' ' . $args['filename'] ); }
 	if ( 'http_error' === $GLOBALS['wpnb39']['mode'] ) { return new WP_Error( 'provider_url_private-token', 'private-token ' . $url . ' ' . $args['filename'] ); }
 	return array( 'response' => array( 'code' => $GLOBALS['wpnb39']['status'] ), 'headers' => array( 'content-length' => $GLOBALS['wpnb39']['length'] ) );
 }
@@ -126,7 +127,7 @@ try {
 		wpnb39_reset(); $GLOBALS['wpnb39']['max'] = $max;
 		wpnb39_error( $media->import_url( $input ), 'media_import_limit_unavailable' );
 	}
-	foreach ( array( 'temp_failure' => 'media_temp_failed', 'http_error' => 'media_import_http_failed', 'missing_staging' => 'media_import_size_invalid', 'revoke_http' => 'media_import_permission_denied', 'revoke_sideload' => 'media_import_permission_denied', 'sideload_error' => 'media_import_sideload_failed', 'insert_error' => 'media_import_attachment_failed' ) as $mode => $code ) {
+	foreach ( array( 'temp_failure' => 'media_temp_failed', 'http_error' => 'media_import_http_failed', 'http_throw' => 'media_import_recovery_required', 'missing_staging' => 'media_import_size_invalid', 'revoke_http' => 'media_import_permission_denied', 'revoke_sideload' => 'media_import_permission_denied', 'sideload_error' => 'media_import_sideload_failed', 'insert_error' => 'media_import_attachment_failed' ) as $mode => $code ) {
 		wpnb39_reset(); $GLOBALS['wpnb39']['mode'] = $mode;
 		wpnb39_error( $media->import_url( $input ), $code );
 	}
