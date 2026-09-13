@@ -42,6 +42,14 @@ if [[ "$(grep -cF 'new \WP_Filesystem_Direct( null )' "$source_editor" || true)"
     echo "ERROR: source editing must retain exactly one direct WordPress filesystem constructor." >&2
     exit 1
 fi
+if [[ "$(grep -cF "new \\SplFileObject( \$target['canonical_path'], 'rb' )" "$source_editor" || true)" != "1" ]]; then
+    echo "ERROR: source editing must retain exactly one read-only advisory-lock handle on the confined target." >&2
+    exit 1
+fi
+if [[ "$(grep -cF '->flock( LOCK_EX | LOCK_NB )' "$source_editor" || true)" != "1" || "$(grep -cF '->flock( LOCK_UN )' "$source_editor" || true)" != "1" ]]; then
+    echo "ERROR: source editing must retain one non-blocking exclusive advisory lock and one explicit unlock." >&2
+    exit 1
+fi
 if [[ "$(grep -cF 'wp_remote_get(' "$source_editor" || true)" != "1" ]]; then
     echo "ERROR: source editing runtime validation must retain one bounded Core-compatible loopback request call site." >&2
     exit 1
